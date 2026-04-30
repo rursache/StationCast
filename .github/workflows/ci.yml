@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "stable"
+          cache: true
+
+      - name: Install ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test
+        run: go test -race ./...
+
+      - name: Build
+        run: go build -o /tmp/stationcast ./cmd/stationcast
+
+      - name: Smoke test (silence stream, no library)
+        run: |
+          mkdir -p /tmp/music /tmp/data
+          STATIONCAST_ADMIN_PASSWORD=ci \
+          STATIONCAST_MUSIC_DIR=/tmp/music \
+          STATIONCAST_DATA_DIR=/tmp/data \
+          STATIONCAST_ADDR=127.0.0.1:18000 \
+          /tmp/stationcast > /tmp/sc.log 2>&1 &
+          SC=$!
+          sleep 3
+          curl -fsS http://127.0.0.1:18000/now-playing > /tmp/np.json
+          cat /tmp/np.json
+          curl -fsS -m 4 http://127.0.0.1:18000/stream -o /tmp/stream.mp3
+          test $(wc -c < /tmp/stream.mp3) -gt 50000 || (echo "stream too small"; exit 1)
+          ffprobe -hide_banner -loglevel error -i /tmp/stream.mp3 -f null - 2>&1 | tee /tmp/probe.log
+          test ! -s /tmp/probe.log || (echo "decode errors"; exit 1)
+          kill $SC || true
+          wait $SC 2>/dev/null || true
+          echo "CI smoke test ok"

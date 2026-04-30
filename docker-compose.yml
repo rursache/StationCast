@@ -1,0 +1,17 @@
+services:
+  stationcast:
+    image: ghcr.io/rursache/stationcast:latest
+    container_name: stationcast
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./music:/music:rw
+      - ./data:/data
+    environment:
+      STATIONCAST_ADMIN_PASSWORD: changeme
+      STATIONCAST_STATION_NAME: StationCast
+      STATIONCAST_BITRATE: "128"
+      STATIONCAST_LOUDNORM: "false"
+      STATIONCAST_ITUNES_ART: "true"
+      # STATIONCAST_PUBLIC_URL: https://radio.example.com
