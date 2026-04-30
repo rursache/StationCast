@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>StationCast Admin Dashboard</title>
+  <link rel="icon" type="image/svg+xml" href="/static/icon.svg">
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="/static/app.css">
 </head>
@@ -12,9 +13,7 @@
 
   <header class="flex items-center justify-between mb-8">
     <div class="flex items-center gap-3">
-      <div class="w-9 h-9 rounded-lg bg-gradient-to-br from-red-700 to-red-900 flex items-center justify-center text-white shadow-lg shadow-red-900/40">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-5 h-5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 19V5l12-2v14M9 19a3 3 0 11-6 0 3 3 0 016 0zm12-3a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
-      </div>
+      <img src="/static/icon.svg" alt="" class="w-9 h-9 rounded-lg shadow-lg shadow-red-900/40">
       <div>
         <h1 class="text-lg font-semibold leading-tight">StationCast Admin Dashboard</h1>
         <p class="text-xs text-neutral-500">{{.StationName}}</p>

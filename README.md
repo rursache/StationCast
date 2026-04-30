@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="internal/httpx/static/icon.svg" alt="StationCast" width="128">
+</p>
+
 # StationCast
 
 A small, self-contained internet radio server in Go. Streams a continuous audio feed from a directory of music files in Icecast/SHOUTcast style, with a simple admin and a public listener UI

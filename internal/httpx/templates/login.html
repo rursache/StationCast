@@ -4,11 +4,15 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{.StationName}} - Admin</title>
+  <link rel="icon" type="image/svg+xml" href="/static/icon.svg">
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="min-h-screen flex items-center justify-center p-6">
   <form method="post" action="/admin/login" class="w-full max-w-sm bg-neutral-900 rounded-xl p-6 space-y-4">
-    <h1 class="text-xl font-semibold">{{.StationName}} admin</h1>
+    <div class="flex items-center gap-3">
+      <img src="/static/icon.svg" alt="" class="w-9 h-9 rounded-lg">
+      <h1 class="text-xl font-semibold">{{.StationName}} admin</h1>
+    </div>
     <input name="password" type="password" required autofocus placeholder="Password"
       class="w-full bg-neutral-950 border border-neutral-800 rounded px-3 py-2">
     <button type="submit" class="w-full bg-white text-neutral-900 rounded px-3 py-2 font-medium">Sign in</button>

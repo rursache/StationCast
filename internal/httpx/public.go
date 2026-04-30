@@ -145,6 +145,8 @@ func (s *Server) handleStatic(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/css; charset=utf-8")
 	case ".js":
 		w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
+	case ".svg":
+		w.Header().Set("Content-Type", "image/svg+xml; charset=utf-8")
 	}
 	w.Header().Set("Cache-Control", "public, max-age=300")
 	w.Write(data)
