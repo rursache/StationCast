@@ -3,97 +3,371 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{{.StationName}} - Admin</title>
+  <title>StationCast Admin Dashboard</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+  <link rel="stylesheet" href="/static/app.css">
 </head>
-<body class="min-h-screen p-4">
-  <header class="flex items-center justify-between mb-6">
-    <h1 class="text-2xl font-semibold">{{.StationName}}</h1>
-    <form method="post" action="/admin/logout"><button class="text-sm text-neutral-400 hover:text-white">Sign out</button></form>
+<body class="min-h-screen bg-gradient-to-b from-neutral-950 via-neutral-950 to-neutral-900">
+<div class="max-w-7xl mx-auto px-4 py-6">
+
+  <header class="flex items-center justify-between mb-8">
+    <div class="flex items-center gap-3">
+      <div class="w-9 h-9 rounded-lg bg-gradient-to-br from-red-700 to-red-900 flex items-center justify-center text-white shadow-lg shadow-red-900/40">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-5 h-5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 19V5l12-2v14M9 19a3 3 0 11-6 0 3 3 0 016 0zm12-3a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+      </div>
+      <div>
+        <h1 class="text-lg font-semibold leading-tight">StationCast Admin Dashboard</h1>
+        <p class="text-xs text-neutral-500">{{.StationName}}</p>
+      </div>
+    </div>
+    <div class="flex items-center gap-2">
+      <a href="/" class="text-xs text-neutral-400 hover:text-white border border-neutral-800 hover:border-neutral-700 rounded-lg px-3 py-1.5 transition">Public page →</a>
+      <form method="post" action="/admin/logout">
+        <button class="text-xs text-neutral-400 hover:text-white border border-neutral-800 hover:border-neutral-700 rounded-lg px-3 py-1.5 transition">Sign out</button>
+      </form>
+    </div>
   </header>
 
-  <section class="bg-neutral-900 rounded-xl p-4 mb-4">
-    <div class="flex items-center justify-between flex-wrap gap-3">
-      <div>
-        <p class="text-xs uppercase tracking-wide text-neutral-500">Now playing</p>
-        <p class="text-lg">{{if .Current}}{{displayTitle .Current.Title .Current.Artist}}{{else}}Idle{{end}}</p>
-        <p class="text-sm text-neutral-500">Up next: {{if .Next}}{{displayTitle .Next.Title .Next.Artist}}{{else}}-{{end}}</p>
-        <p class="text-xs text-neutral-600 mt-1">Listeners: {{.Listeners}}</p>
+  <!-- Now playing hero -->
+  <section class="bg-neutral-900/60 backdrop-blur border border-neutral-800 rounded-2xl p-5 mb-6">
+    <div class="flex flex-col md:flex-row gap-5">
+      <div class="w-32 h-32 md:w-36 md:h-36 rounded-xl overflow-hidden bg-neutral-800 flex-shrink-0 flex items-center justify-center">
+        {{if and .Current .Current.HasArt}}
+          <img src="/art/{{.Current.ID}}" alt="" class="w-full h-full object-cover">
+        {{else}}
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="w-12 h-12 text-neutral-600"><path stroke-linecap="round" stroke-linejoin="round" d="M9 19V5l12-2v14"/><circle cx="6" cy="19" r="3" stroke-linecap="round" stroke-linejoin="round"/><circle cx="18" cy="16" r="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        {{end}}
       </div>
-      <div class="flex gap-2">
-        <form method="post" action="/admin/skip"><button class="bg-white text-neutral-900 px-4 py-2 rounded font-medium">Skip</button></form>
-        <form method="post" action="/admin/mode" class="flex gap-1 items-center">
-          <select name="mode" class="bg-neutral-950 border border-neutral-800 rounded px-2 py-2">
-            <option value="shuffle" {{if eq .Mode "shuffle"}}selected{{end}}>Shuffle</option>
-            <option value="sequential" {{if eq .Mode "sequential"}}selected{{end}}>Sequential</option>
-            <option value="loop" {{if eq .Mode "loop"}}selected{{end}}>Loop</option>
-          </select>
-          <button class="bg-neutral-800 px-3 py-2 rounded text-sm">Set</button>
-        </form>
+      <div class="flex-1 min-w-0 flex flex-col justify-between gap-3">
+        <div>
+          <div class="flex items-center gap-2 mb-1">
+            <span class="relative flex h-2 w-2">
+              <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-500 opacity-75"></span>
+              <span class="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+            </span>
+            <span class="text-[11px] uppercase tracking-widest text-red-400 font-medium">On air</span>
+            <span class="text-[11px] uppercase tracking-widest text-neutral-600 ml-2">Now playing</span>
+          </div>
+          <h2 id="np-title" class="text-xl md:text-2xl font-semibold truncate">
+            {{if .Current}}{{.Current.Title}}{{else}}Idle{{end}}
+          </h2>
+          <p id="np-artist" class="text-sm text-neutral-400 truncate">
+            {{if .Current}}{{.Current.Artist}}{{if .Current.Album}} · {{.Current.Album}}{{end}}{{else}}Waiting for tracks{{end}}
+          </p>
+          <p id="np-next" class="text-xs text-neutral-500 mt-2 truncate">
+            Up next: {{if .Next}}{{displayTitle .Next.Title .Next.Artist}}{{else}}—{{end}}
+          </p>
+        </div>
+        <div class="flex flex-wrap items-center gap-2">
+          <button id="local-play" type="button" aria-label="Listen" class="inline-flex items-center justify-center w-10 h-10 rounded-full bg-red-700 hover:bg-red-600 text-white shadow-lg shadow-red-900/40 transition" title="Listen to the broadcast in this browser">
+            <svg id="local-play-icon" viewBox="0 0 24 24" fill="currentColor" class="w-4 h-4 ml-0.5"><path d="M8 5v14l11-7z"/></svg>
+            <svg id="local-pause-icon" viewBox="0 0 24 24" fill="currentColor" class="w-4 h-4 hidden"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg>
+          </button>
+          <div id="local-vol-wrap" class="hidden items-center gap-2 bg-neutral-800/60 border border-neutral-700 rounded-lg px-3 py-2">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-3.5 h-3.5 text-neutral-400"><path stroke-linecap="round" stroke-linejoin="round" d="M5 9v6h4l5 5V4L9 9H5z"/></svg>
+            <input id="local-vol" type="range" min="0" max="100" value="80" class="w-24">
+          </div>
+          <form method="post" action="/admin/skip">
+            <button class="inline-flex items-center gap-2 bg-white text-neutral-900 hover:bg-neutral-200 px-4 py-2 rounded-lg font-medium text-sm transition">
+              <svg viewBox="0 0 24 24" fill="currentColor" class="w-4 h-4"><path d="M5 4l10 8-10 8V4zm12 0h2v16h-2V4z"/></svg>
+              Skip
+            </button>
+          </form>
+          <form method="post" action="/admin/mode" class="flex items-center gap-2">
+            <select name="mode" class="text-sm py-2 pl-3">
+              <option value="shuffle"    {{if eq .Mode "shuffle"}}selected{{end}}>Shuffle</option>
+              <option value="sequential" {{if eq .Mode "sequential"}}selected{{end}}>Sequential</option>
+              <option value="loop"       {{if eq .Mode "loop"}}selected{{end}}>Loop</option>
+            </select>
+            <button class="bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 text-sm px-3 py-2 rounded-lg transition">Apply</button>
+          </form>
+          <div class="ml-auto flex items-center gap-2 text-sm text-neutral-400">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-4 h-4"><path stroke-linecap="round" stroke-linejoin="round" d="M12 14a4 4 0 100-8 4 4 0 000 8z"/><path stroke-linecap="round" stroke-linejoin="round" d="M5 21a7 7 0 0114 0H5z"/></svg>
+            <span><strong id="np-listeners" class="text-white">{{.Listeners}}</strong> listening</span>
+          </div>
+        </div>
       </div>
     </div>
   </section>
 
-  <section class="bg-neutral-900 rounded-xl p-4 mb-4">
-    <h2 class="font-semibold mb-2">Queue</h2>
-    {{if .Queue}}
-    <ol class="space-y-1">
-      {{range $i, $t := .Queue}}
-      <li class="flex items-center justify-between text-sm">
-        <span>{{add $i 1}}. {{displayTitle $t.Title $t.Artist}}</span>
-        <form method="post" action="/admin/queue/remove">
-          <input type="hidden" name="idx" value="{{$i}}">
-          <button class="text-neutral-400 hover:text-red-400 text-xs">remove</button>
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Left column: Queue + Upload -->
+    <div class="lg:col-span-1 space-y-6">
+
+      <section class="bg-neutral-900/60 backdrop-blur border border-neutral-800 rounded-2xl p-5">
+        <div class="flex items-center justify-between mb-3">
+          <h3 class="font-semibold">Queue</h3>
+          <span class="text-xs text-neutral-500">{{len .Queue}} item{{if ne (len .Queue) 1}}s{{end}}</span>
+        </div>
+        {{if .Queue}}
+        <ol class="space-y-1.5">
+          {{range $i, $t := .Queue}}
+          <li class="group flex items-center gap-2 text-sm bg-neutral-950/40 hover:bg-neutral-800/40 rounded-lg px-3 py-2">
+            <span class="text-neutral-600 text-xs w-5 text-right">{{add $i 1}}</span>
+            <span class="flex-1 truncate">{{displayTitle $t.Title $t.Artist}}</span>
+            <form method="post" action="/admin/queue/remove">
+              <input type="hidden" name="idx" value="{{$i}}">
+              <button class="opacity-0 group-hover:opacity-100 text-neutral-500 hover:text-red-400 text-xs transition" title="Remove">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-4 h-4"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+              </button>
+            </form>
+          </li>
+          {{end}}
+        </ol>
+        {{else}}
+        <p class="text-sm text-neutral-500 italic">Empty — shuffle picks tracks automatically</p>
+        {{end}}
+      </section>
+
+      <section class="bg-neutral-900/60 backdrop-blur border border-neutral-800 rounded-2xl p-5">
+        <h3 class="font-semibold mb-3">Upload</h3>
+        <form method="post" action="/admin/files/upload" enctype="multipart/form-data" class="space-y-3" id="upload-form">
+          <label class="block">
+            <input id="file-pick" type="file" name="file" required accept=".mp3,.wav,.flac,.ogg,.oga,.m4a,.aac" class="hidden">
+            <div id="file-drop" class="cursor-pointer border-2 border-dashed border-neutral-700 hover:border-red-600 rounded-xl p-6 text-center transition">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="w-8 h-8 mx-auto mb-2 text-neutral-500"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5-5 5 5M12 5v12"/></svg>
+              <p class="text-sm text-neutral-400" id="file-label">Click or drop an audio file</p>
+              <p class="text-xs text-neutral-600 mt-1">mp3, wav, flac, ogg, m4a, aac</p>
+            </div>
+          </label>
+          <button type="submit" class="w-full bg-red-700 hover:bg-red-600 text-white px-3 py-2 rounded-lg text-sm font-medium transition shadow-lg shadow-red-900/30">Upload</button>
         </form>
-      </li>
-      {{end}}
-    </ol>
-    {{else}}
-    <p class="text-sm text-neutral-500">Empty - shuffle picks tracks automatically</p>
-    {{end}}
-  </section>
+      </section>
 
-  <section class="bg-neutral-900 rounded-xl p-4 mb-4">
-    <h2 class="font-semibold mb-2">Upload</h2>
-    <form method="post" action="/admin/files/upload" enctype="multipart/form-data" class="flex gap-2">
-      <input type="file" name="file" required accept=".mp3,.wav,.flac,.ogg,.oga,.m4a,.aac" class="text-sm">
-      <button class="bg-white text-neutral-900 px-3 py-1 rounded text-sm">Upload</button>
-    </form>
-  </section>
+    </div>
 
-  <section class="bg-neutral-900 rounded-xl p-4">
-    <h2 class="font-semibold mb-2">Library ({{len .Tracks}})</h2>
-    <div class="overflow-y-auto max-h-[60vh]">
-    <table class="w-full text-sm">
-      <thead class="text-left text-neutral-500 text-xs uppercase">
-        <tr><th class="py-1">Track</th><th>Album</th><th class="text-right">Actions</th></tr>
-      </thead>
-      <tbody>
-        {{range .Tracks}}
-        <tr class="border-t border-neutral-800">
-          <td class="py-1 pr-2">{{displayTitle .Title .Artist}}</td>
-          <td class="text-neutral-500 pr-2">{{.Album}}</td>
-          <td class="text-right whitespace-nowrap">
+    <!-- Right column: Library -->
+    <section id="library-section" class="lg:col-span-2 bg-neutral-900/60 backdrop-blur border border-neutral-800 rounded-2xl p-5 flex flex-col" style="max-height: calc(100vh - 260px); min-height: 400px;">
+      <div class="flex items-center justify-between gap-3 mb-3">
+        <h3 class="font-semibold">Library <span id="lib-count" class="text-neutral-500 font-normal">({{len .Tracks}})</span></h3>
+        <div class="flex items-center gap-2">
+          <button id="lib-refresh" type="button" title="Refresh library" class="text-neutral-400 hover:text-white border border-neutral-800 hover:border-neutral-700 rounded-lg px-2 py-1.5 text-xs transition">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-3.5 h-3.5"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v6h6M20 20v-6h-6M5 19a9 9 0 0014.36-3.36M19 5a9 9 0 00-14.36 3.36"/></svg>
+          </button>
+          <input id="lib-search" type="search" placeholder="Filter…" class="bg-neutral-950 border border-neutral-800 focus:border-red-600 outline-none rounded-lg px-3 py-1.5 text-sm w-48">
+        </div>
+      </div>
+      <div class="flex-1 overflow-y-auto -mx-2">
+        <table class="w-full text-sm" id="lib-table">
+          <thead class="sticky top-0 bg-neutral-900/95 backdrop-blur text-left text-neutral-500 text-[11px] uppercase tracking-wider">
+            <tr>
+              <th class="font-medium py-2 px-2">Track</th>
+              <th class="font-medium py-2 px-2 hidden md:table-cell">Album</th>
+              <th class="font-medium py-2 px-2 text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="lib-tbody">
+            {{range .Tracks}}
+            <tr class="lib-row border-t border-neutral-800/60 hover:bg-neutral-800/30 transition">
+              <td class="py-2 px-2 align-middle">
+                <div class="flex items-center gap-2 min-w-0">
+                  <div class="w-8 h-8 rounded bg-neutral-800 flex-shrink-0 flex items-center justify-center overflow-hidden">
+                    {{if .HasArt}}<img src="/art/{{.ID}}" class="w-full h-full object-cover">{{else}}<span class="text-neutral-600">♪</span>{{end}}
+                  </div>
+                  <div class="min-w-0">
+                    <div class="truncate">{{if .Title}}{{.Title}}{{else}}<span class="text-neutral-500">untitled</span>{{end}}</div>
+                    <div class="text-xs text-neutral-500 truncate">{{.Artist}}</div>
+                  </div>
+                </div>
+              </td>
+              <td class="py-2 px-2 align-middle text-neutral-400 hidden md:table-cell truncate">{{.Album}}</td>
+              <td class="py-2 px-2 align-middle text-right whitespace-nowrap">
+                <form method="post" action="/admin/queue" class="inline">
+                  <input type="hidden" name="id" value="{{.ID}}">
+                  <button class="text-neutral-300 hover:text-red-400 px-2 py-1 text-xs rounded hover:bg-neutral-800/60 transition" title="Add to queue">＋ queue</button>
+                </form>
+                <form method="post" action="/admin/files/rename" class="inline" data-rename>
+                  <input type="hidden" name="id" value="{{.ID}}">
+                  <input type="hidden" name="name" value="">
+                  <button class="text-neutral-300 hover:text-amber-400 px-2 py-1 text-xs rounded hover:bg-neutral-800/60 transition" title="Rename file">rename</button>
+                </form>
+                <form method="post" action="/admin/files/delete" class="inline" data-confirm="Delete this file from disk?">
+                  <input type="hidden" name="id" value="{{.ID}}">
+                  <button class="text-red-400 hover:text-red-300 px-2 py-1 text-xs rounded hover:bg-red-500/10 transition" title="Delete">delete</button>
+                </form>
+              </td>
+            </tr>
+            {{else}}
+            <tr id="lib-empty"><td colspan="3" class="py-12 text-center text-neutral-500">
+              No tracks. Upload one or drop files into the music directory.
+            </td></tr>
+            {{end}}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
+  <footer class="text-center mt-8 text-xs text-neutral-600">
+    StationCast · <a href="https://github.com/rursache/StationCast" class="hover:text-neutral-400">github.com/rursache/StationCast</a>
+  </footer>
+</div>
+
+<audio id="local-audio" preload="none" crossorigin="anonymous"></audio>
+<script>
+  // Local in-admin monitor: play/pause + volume, controls only this browser's
+  // audio element, never the server stream.
+  (function() {
+    const audio = document.getElementById('local-audio');
+    const btn = document.getElementById('local-play');
+    const playIcon = document.getElementById('local-play-icon');
+    const pauseIcon = document.getElementById('local-pause-icon');
+    const volWrap = document.getElementById('local-vol-wrap');
+    const vol = document.getElementById('local-vol');
+    if (!audio || !btn) return;
+
+    const ua = navigator.userAgent;
+    const isApple = /iPhone|iPad|iPod|Macintosh/.test(ua) && /Safari/.test(ua) && !/Chrome|CriOS|FxiOS/.test(ua);
+    const isiOS = /iPhone|iPad|iPod/.test(ua);
+    function setSrc() {
+      audio.src = (isiOS || (isApple && audio.canPlayType('application/vnd.apple.mpegurl')))
+        ? '/hls.m3u8' : '/stream';
+    }
+    setSrc();
+    audio.volume = (parseInt(vol.value, 10) || 80) / 100;
+    vol.addEventListener('input', () => { audio.volume = vol.value / 100; });
+
+    function setPlaying(p) {
+      if (p) {
+        playIcon.classList.add('hidden');
+        pauseIcon.classList.remove('hidden');
+        volWrap.classList.remove('hidden');
+        volWrap.classList.add('inline-flex');
+        btn.setAttribute('aria-label', 'Pause');
+      } else {
+        pauseIcon.classList.add('hidden');
+        playIcon.classList.remove('hidden');
+        btn.setAttribute('aria-label', 'Listen');
+      }
+    }
+    btn.addEventListener('click', async () => {
+      if (audio.paused) {
+        try { setSrc(); audio.load(); await audio.play(); setPlaying(true); }
+        catch { setPlaying(false); }
+      } else {
+        audio.pause(); setPlaying(false);
+      }
+    });
+    audio.addEventListener('play', () => setPlaying(true));
+    audio.addEventListener('pause', () => setPlaying(false));
+  })();
+</script>
+<script>
+  // File drop styling
+  const drop = document.getElementById('file-drop');
+  const pick = document.getElementById('file-pick');
+  const label = document.getElementById('file-label');
+  if (drop && pick) {
+    pick.addEventListener('change', () => { if (pick.files[0]) label.textContent = pick.files[0].name; });
+    ['dragover','dragenter'].forEach(e => drop.addEventListener(e, ev => { ev.preventDefault(); drop.classList.add('border-red-600','bg-red-500/10'); }));
+    ['dragleave','drop'].forEach(e => drop.addEventListener(e, ev => { ev.preventDefault(); drop.classList.remove('border-red-600','bg-red-500/10'); }));
+    drop.addEventListener('drop', ev => {
+      if (ev.dataTransfer.files[0]) { pick.files = ev.dataTransfer.files; label.textContent = pick.files[0].name; }
+    });
+  }
+
+  // Library client-side filter
+  const search = document.getElementById('lib-search');
+  function applyFilter() {
+    const q = (search?.value || '').toLowerCase();
+    document.querySelectorAll('#lib-table tbody tr.lib-row').forEach(tr => {
+      tr.style.display = tr.textContent.toLowerCase().includes(q) ? '' : 'none';
+    });
+  }
+  if (search) search.addEventListener('input', applyFilter);
+
+  // Rename and confirm
+  function bindRowActions() {
+    document.querySelectorAll('form[data-rename]:not([data-bound])').forEach(f => {
+      f.dataset.bound = '1';
+      f.addEventListener('submit', e => {
+        const v = prompt('New filename (with extension):');
+        if (!v) { e.preventDefault(); return; }
+        f.elements.name.value = v;
+      });
+    });
+    document.querySelectorAll('form[data-confirm]:not([data-bound])').forEach(f => {
+      f.dataset.bound = '1';
+      f.addEventListener('submit', e => { if (!confirm(f.dataset.confirm)) e.preventDefault(); });
+    });
+  }
+  bindRowActions();
+
+  // Live refresh: now-playing every 5s, library every 15s + on focus
+  function escapeHTML(s) { return (s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+  async function refreshNowPlaying() {
+    try {
+      const r = await fetch('/now-playing'); if (!r.ok) return;
+      const d = await r.json();
+      const t = document.getElementById('np-title');
+      const a = document.getElementById('np-artist');
+      const n = document.getElementById('np-next');
+      const l = document.getElementById('np-listeners');
+      if (t) t.textContent = d.title || 'Idle';
+      if (a) {
+        let s = d.artist || '';
+        if (d.album) s = (s ? s + ' · ' : '') + d.album;
+        a.textContent = s || 'Waiting for tracks';
+      }
+      if (n) n.textContent = 'Up next: ' + (d.next_title ? (d.next_artist ? d.next_artist + ' - ' : '') + d.next_title : '—');
+      if (l) l.textContent = d.listeners || 0;
+    } catch {}
+  }
+
+  async function refreshLibrary() {
+    try {
+      const r = await fetch('/admin/library.json', { credentials: 'same-origin' });
+      if (!r.ok) return;
+      const tracks = await r.json();
+      const tbody = document.getElementById('lib-tbody');
+      const count = document.getElementById('lib-count');
+      if (count) count.textContent = `(${tracks.length})`;
+      if (!tbody) return;
+      if (tracks.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="3" class="py-12 text-center text-neutral-500">No tracks. Upload one or drop files into the music directory.</td></tr>`;
+        return;
+      }
+      tbody.innerHTML = tracks.map(t => `
+        <tr class="lib-row border-t border-neutral-800/60 hover:bg-neutral-800/30 transition">
+          <td class="py-2 px-2 align-middle">
+            <div class="flex items-center gap-2 min-w-0">
+              <div class="w-8 h-8 rounded bg-neutral-800 flex-shrink-0 flex items-center justify-center overflow-hidden">
+                ${t.has_art ? `<img src="/art/${t.id}" class="w-full h-full object-cover">` : `<span class="text-neutral-600">♪</span>`}
+              </div>
+              <div class="min-w-0">
+                <div class="truncate">${escapeHTML(t.title) || '<span class="text-neutral-500">untitled</span>'}</div>
+                <div class="text-xs text-neutral-500 truncate">${escapeHTML(t.artist)}</div>
+              </div>
+            </div>
+          </td>
+          <td class="py-2 px-2 align-middle text-neutral-400 hidden md:table-cell truncate">${escapeHTML(t.album)}</td>
+          <td class="py-2 px-2 align-middle text-right whitespace-nowrap">
             <form method="post" action="/admin/queue" class="inline">
-              <input type="hidden" name="id" value="{{.ID}}">
-              <button class="text-neutral-300 hover:text-white text-xs px-2">queue</button>
+              <input type="hidden" name="id" value="${t.id}">
+              <button class="text-neutral-300 hover:text-red-400 px-2 py-1 text-xs rounded hover:bg-neutral-800/60 transition" title="Add to queue">＋ queue</button>
             </form>
-            <form method="post" action="/admin/files/rename" class="inline" onsubmit="this.elements.name.value = prompt('New filename', ''); return !!this.elements.name.value">
-              <input type="hidden" name="id" value="{{.ID}}">
+            <form method="post" action="/admin/files/rename" class="inline" data-rename>
+              <input type="hidden" name="id" value="${t.id}">
               <input type="hidden" name="name" value="">
-              <button class="text-neutral-300 hover:text-white text-xs px-2">rename</button>
+              <button class="text-neutral-300 hover:text-amber-400 px-2 py-1 text-xs rounded hover:bg-neutral-800/60 transition" title="Rename file">rename</button>
             </form>
-            <form method="post" action="/admin/files/delete" class="inline" onsubmit="return confirm('Delete this file?')">
-              <input type="hidden" name="id" value="{{.ID}}">
-              <button class="text-red-400 hover:text-red-300 text-xs px-2">delete</button>
+            <form method="post" action="/admin/files/delete" class="inline" data-confirm="Delete this file from disk?">
+              <input type="hidden" name="id" value="${t.id}">
+              <button class="text-red-400 hover:text-red-300 px-2 py-1 text-xs rounded hover:bg-red-500/10 transition" title="Delete">delete</button>
             </form>
           </td>
-        </tr>
-        {{end}}
-      </tbody>
-    </table>
-    </div>
-  </section>
+        </tr>`).join('');
+      bindRowActions();
+      applyFilter();
+    } catch {}
+  }
+
+  document.getElementById('lib-refresh')?.addEventListener('click', refreshLibrary);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) { refreshNowPlaying(); refreshLibrary(); } });
+
+  setInterval(refreshNowPlaying, 5000);
+  setInterval(refreshLibrary, 15000);
+</script>
 </body>
 </html>{{end}}

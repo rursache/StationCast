@@ -1,6 +1,7 @@
 package httpx
 
 import (
+	"encoding/json"
 	"net/http"
 	"sort"
 	"strconv"
@@ -8,6 +9,28 @@ import (
 
 	"github.com/rursache/StationCast/internal/playlist"
 )
+
+func (s *Server) sortedLibrary() []adminViewTrack {
+	tracks := s.lib.Snapshot()
+	sort.Slice(tracks, func(i, j int) bool {
+		ti := strings.ToLower(tracks[i].Artist + tracks[i].Title)
+		tj := strings.ToLower(tracks[j].Artist + tracks[j].Title)
+		return ti < tj
+	})
+	view := make([]adminViewTrack, 0, len(tracks))
+	for _, t := range tracks {
+		view = append(view, adminViewTrack{
+			ID: t.ID, Path: t.Path, Title: t.Title, Artist: t.Artist, Album: t.Album, HasArt: t.HasArt,
+		})
+	}
+	return view
+}
+
+func (s *Server) handleLibraryJSON(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+	_ = json.NewEncoder(w).Encode(s.sortedLibrary())
+}
 
 func (s *Server) handleLoginPage(w http.ResponseWriter, r *http.Request) {
 	s.tmpl.Render(w, "login.html", map[string]any{"StationName": s.cfg.StationName})
@@ -42,38 +65,21 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 }
 
 type adminViewTrack struct {
-	ID     int64
-	Path   string
-	Title  string
-	Artist string
-	Album  string
-	HasArt bool
+	ID     int64  `json:"id"`
+	Path   string `json:"path"`
+	Title  string `json:"title"`
+	Artist string `json:"artist"`
+	Album  string `json:"album"`
+	HasArt bool   `json:"has_art"`
 }
 
 func (s *Server) handleAdminHome(w http.ResponseWriter, r *http.Request) {
-	tracks := s.lib.Snapshot()
-	sort.Slice(tracks, func(i, j int) bool {
-		ti := strings.ToLower(tracks[i].Artist + tracks[i].Title)
-		tj := strings.ToLower(tracks[j].Artist + tracks[j].Title)
-		return ti < tj
-	})
-	view := make([]adminViewTrack, 0, len(tracks))
-	for _, t := range tracks {
-		view = append(view, adminViewTrack{
-			ID:     t.ID,
-			Path:   t.Path,
-			Title:  t.Title,
-			Artist: t.Artist,
-			Album:  t.Album,
-			HasArt: t.HasArt,
-		})
-	}
 	data := map[string]any{
 		"StationName": s.cfg.StationName,
 		"Current":     s.sched.Current(),
 		"Next":        s.sched.Peek(),
 		"Mode":        string(s.sched.Mode()),
-		"Tracks":      view,
+		"Tracks":      s.sortedLibrary(),
 		"Queue":       s.sched.Queue(),
 		"History":     s.sched.History(),
 		"Listeners":   s.hub.Listeners(),

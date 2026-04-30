@@ -66,6 +66,7 @@ func NewRouter(cfg *config.Config, db *storage.DB, lib *playlist.Library, sched 
 		r.Group(func(r chi.Router) {
 			r.Use(s.requireAuth)
 			r.Get("/", s.handleAdminHome)
+			r.Get("/library.json", s.handleLibraryJSON)
 			r.Post("/skip", s.handleSkip)
 			r.Post("/mode", s.handleSetMode)
 			r.Post("/queue", s.handleEnqueue)

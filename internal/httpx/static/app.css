@@ -1,4 +1,64 @@
 html, body { height: 100%; }
-input[type="range"] { height: 4px; }
+
+input[type="range"] {
+  height: 4px;
+  background: rgba(255,255,255,0.15);
+  border-radius: 9999px;
+  -webkit-appearance: none;
+  appearance: none;
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px; height: 14px;
+  border-radius: 9999px;
+  background: white;
+  cursor: pointer;
+  border: 0;
+}
+input[type="range"]::-moz-range-thumb {
+  width: 14px; height: 14px;
+  border-radius: 9999px;
+  background: white;
+  cursor: pointer;
+  border: 0;
+}
+
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-thumb { background: #2a2a2a; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #3a3a3a; }
+
+details > summary { list-style: none; }
+details > summary::-webkit-details-marker { display: none; }
+details[open] > summary svg.transition-transform { transform: rotate(180deg); }
+
+/* Style native selects */
+select {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  background-color: rgb(23 23 23);
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23a3a3a3' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M6 9l6 6 6-6'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 0.5rem center;
+  background-size: 1rem;
+  padding-right: 2rem !important;
+  border: 1px solid rgb(38 38 38);
+  border-radius: 0.5rem;
+  color: rgb(245 245 245);
+  cursor: pointer;
+}
+select:focus {
+  border-color: rgb(185 28 28);
+  outline: none;
+}
+select option {
+  background-color: rgb(23 23 23);
+  color: rgb(245 245 245);
+}
+
+/* Tighter focus ring (dark red) */
+*:focus-visible {
+  outline: 2px solid rgb(185 28 28);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
