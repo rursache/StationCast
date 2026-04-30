@@ -1,4 +1,5 @@
 /bin/
+/dist/
 /data/
 /music/
 *.db

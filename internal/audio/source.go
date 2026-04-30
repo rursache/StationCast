@@ -6,6 +6,7 @@ import (
 	"io"
 	"log/slog"
 	"os/exec"
+	"strings"
 
 	"github.com/rursache/StationCast/internal/playlist"
 )
@@ -72,8 +73,8 @@ func (s *pcmSource) startDecoder(t *playlist.Track) (*exec.Cmd, io.ReadCloser, e
 		"-hide_banner", "-loglevel", "warning",
 		"-i", t.Path,
 	}
-	if s.eng.cfg.LoudNorm {
-		args = append(args, "-af", "loudnorm=I=-16:LRA=11:TP=-1.5")
+	if filter := buildAudioFilter(s.eng.cfg.LoudNorm, s.eng.cfg.GainDB); filter != "" {
+		args = append(args, "-af", filter)
 	}
 	args = append(args,
 		"-vn",
@@ -100,4 +101,25 @@ func fillSilence(p []byte) int {
 		p[i] = 0
 	}
 	return len(p)
+}
+
+// buildAudioFilter assembles the ffmpeg -af filter chain.
+// Order matters: loudnorm first (so a loud-normalized signal sits at the target
+// LUFS), then volume so the user-requested boost is applied on top.
+func buildAudioFilter(loudnorm bool, gainDB int) string {
+	parts := []string{}
+	if loudnorm {
+		parts = append(parts, "loudnorm=I=-16:LRA=11:TP=-1.5")
+	}
+	if gainDB != 0 {
+		sign := "+"
+		if gainDB < 0 {
+			sign = ""
+		}
+		parts = append(parts, fmt.Sprintf("volume=%s%ddB", sign, gainDB))
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return strings.Join(parts, ",")
 }

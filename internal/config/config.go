@@ -20,6 +20,7 @@ type Config struct {
 	StationGenre  string
 	LoudNorm      bool
 	ITunesArt     bool
+	GainDB        int
 }
 
 func Load() (*Config, error) {
@@ -40,6 +41,17 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("invalid STATIONCAST_BITRATE: %w", err)
 	}
 	cfg.Bitrate = br
+
+	gain, err := strconv.Atoi(env("STATIONCAST_GAIN_DB", "0"))
+	if err != nil {
+		return nil, fmt.Errorf("invalid STATIONCAST_GAIN_DB: %w", err)
+	}
+	if gain < -20 {
+		gain = -20
+	} else if gain > 20 {
+		gain = 20
+	}
+	cfg.GainDB = gain
 
 	if cfg.AdminPassword == "" {
 		return nil, errors.New("STATIONCAST_ADMIN_PASSWORD is required")

@@ -33,6 +33,7 @@ func main() {
 		"addr", cfg.Addr,
 		"bitrate", cfg.Bitrate,
 		"loudnorm", cfg.LoudNorm,
+		"gain_db", cfg.GainDB,
 	)
 
 	db, err := storage.Open(cfg.DataDir)

@@ -68,6 +68,7 @@ STATIONCAST_DATA_DIR=./data \
 | `STATIONCAST_STATION_NAME` | `StationCast` | Shown in ICY headers, public UI, MediaSession |
 | `STATIONCAST_STATION_GENRE` | `Various` | ICY genre header |
 | `STATIONCAST_LOUDNORM` | `false` | Apply per-track ffmpeg `loudnorm` so volume does not jump between tracks |
+| `STATIONCAST_GAIN_DB` | `0` | Source volume boost in dB (range -20 to +20). Applied after loudnorm so it stacks. Aggressive positive values combined with loudnorm can clip the output (loudnorm targets a true-peak of -1.5 dBTP, so anything above +1 dB will start to push peaks above 0 dB) |
 | `STATIONCAST_ITUNES_ART` | `true` | Fetch missing album art from the iTunes Search API when artist + album tags exist |
 
 ## Endpoints
