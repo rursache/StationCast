@@ -1,0 +1,8 @@
+/bin/
+/data/
+/music/
+*.db
+*.db-shm
+*.db-wal
+.DS_Store
+.claude/settings.local.json

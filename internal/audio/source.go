@@ -1,0 +1,103 @@
+package audio
+
+import (
+	"context"
+	"fmt"
+	"io"
+	"log/slog"
+	"os/exec"
+
+	"github.com/rursache/StationCast/internal/playlist"
+)
+
+// pcmSource is an io.Reader that always returns PCM data at the requested rate.
+// It transparently advances to the next track from the scheduler when the
+// current decoder finishes, and emits silence when the library is empty.
+type pcmSource struct {
+	eng *Engine
+	ctx context.Context
+
+	curCmd *exec.Cmd
+	curOut io.ReadCloser
+	curTrk *playlist.Track
+}
+
+func (s *pcmSource) Read(p []byte) (int, error) {
+	for {
+		if s.ctx.Err() != nil {
+			return 0, s.ctx.Err()
+		}
+		if s.curOut == nil {
+			t := s.eng.sched.Pick()
+			if t == nil {
+				s.eng.sched.MarkPlaying(nil)
+				s.eng.hub.SetMetadata(s.eng.cfg.StationName)
+				return fillSilence(p), nil
+			}
+			cmd, out, err := s.startDecoder(t)
+			if err != nil {
+				slog.Warn("decoder start failed", "track", t.Path, "err", err)
+				continue
+			}
+			s.curCmd = cmd
+			s.curOut = out
+			s.curTrk = t
+			s.eng.mu.Lock()
+			s.eng.curCmd = cmd
+			s.eng.mu.Unlock()
+			s.eng.sched.MarkPlaying(t)
+			s.eng.hub.SetMetadata(t.DisplayTitle())
+			slog.Info("now playing", "id", t.ID, "title", t.DisplayTitle())
+		}
+		n, err := s.curOut.Read(p)
+		if n > 0 {
+			return n, nil
+		}
+		if err != nil {
+			_ = s.curOut.Close()
+			_ = s.curCmd.Wait()
+			s.eng.mu.Lock()
+			s.eng.curCmd = nil
+			s.eng.mu.Unlock()
+			s.curOut = nil
+			s.curCmd = nil
+			s.curTrk = nil
+			continue
+		}
+	}
+}
+
+func (s *pcmSource) startDecoder(t *playlist.Track) (*exec.Cmd, io.ReadCloser, error) {
+	args := []string{
+		"-hide_banner", "-loglevel", "warning",
+		"-i", t.Path,
+	}
+	if s.eng.cfg.LoudNorm {
+		args = append(args, "-af", "loudnorm=I=-16:LRA=11:TP=-1.5")
+	}
+	args = append(args,
+		"-vn",
+		"-f", "s16le",
+		"-acodec", "pcm_s16le",
+		"-ar", fmt.Sprint(sampleRate),
+		"-ac", fmt.Sprint(channels),
+		"pipe:1",
+	)
+	cmd := exec.CommandContext(s.ctx, "ffmpeg", args...)
+	cmd.Stderr = stderrLogger("decoder")
+	out, err := cmd.StdoutPipe()
+	if err != nil {
+		return nil, nil, err
+	}
+	if err := cmd.Start(); err != nil {
+		return nil, nil, err
+	}
+	return cmd, out, nil
+}
+
+func fillSilence(p []byte) int {
+	for i := range p {
+		p[i] = 0
+	}
+	return len(p)
+}

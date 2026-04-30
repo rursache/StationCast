@@ -1,0 +1,99 @@
+{{define "admin.html"}}<!doctype html>
+<html lang="en" class="bg-neutral-950 text-neutral-100">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{.StationName}} - Admin</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+</head>
+<body class="min-h-screen p-4">
+  <header class="flex items-center justify-between mb-6">
+    <h1 class="text-2xl font-semibold">{{.StationName}}</h1>
+    <form method="post" action="/admin/logout"><button class="text-sm text-neutral-400 hover:text-white">Sign out</button></form>
+  </header>
+
+  <section class="bg-neutral-900 rounded-xl p-4 mb-4">
+    <div class="flex items-center justify-between flex-wrap gap-3">
+      <div>
+        <p class="text-xs uppercase tracking-wide text-neutral-500">Now playing</p>
+        <p class="text-lg">{{if .Current}}{{displayTitle .Current.Title .Current.Artist}}{{else}}Idle{{end}}</p>
+        <p class="text-sm text-neutral-500">Up next: {{if .Next}}{{displayTitle .Next.Title .Next.Artist}}{{else}}-{{end}}</p>
+        <p class="text-xs text-neutral-600 mt-1">Listeners: {{.Listeners}}</p>
+      </div>
+      <div class="flex gap-2">
+        <form method="post" action="/admin/skip"><button class="bg-white text-neutral-900 px-4 py-2 rounded font-medium">Skip</button></form>
+        <form method="post" action="/admin/mode" class="flex gap-1 items-center">
+          <select name="mode" class="bg-neutral-950 border border-neutral-800 rounded px-2 py-2">
+            <option value="shuffle" {{if eq .Mode "shuffle"}}selected{{end}}>Shuffle</option>
+            <option value="sequential" {{if eq .Mode "sequential"}}selected{{end}}>Sequential</option>
+            <option value="loop" {{if eq .Mode "loop"}}selected{{end}}>Loop</option>
+          </select>
+          <button class="bg-neutral-800 px-3 py-2 rounded text-sm">Set</button>
+        </form>
+      </div>
+    </div>
+  </section>
+
+  <section class="bg-neutral-900 rounded-xl p-4 mb-4">
+    <h2 class="font-semibold mb-2">Queue</h2>
+    {{if .Queue}}
+    <ol class="space-y-1">
+      {{range $i, $t := .Queue}}
+      <li class="flex items-center justify-between text-sm">
+        <span>{{add $i 1}}. {{displayTitle $t.Title $t.Artist}}</span>
+        <form method="post" action="/admin/queue/remove">
+          <input type="hidden" name="idx" value="{{$i}}">
+          <button class="text-neutral-400 hover:text-red-400 text-xs">remove</button>
+        </form>
+      </li>
+      {{end}}
+    </ol>
+    {{else}}
+    <p class="text-sm text-neutral-500">Empty - shuffle picks tracks automatically</p>
+    {{end}}
+  </section>
+
+  <section class="bg-neutral-900 rounded-xl p-4 mb-4">
+    <h2 class="font-semibold mb-2">Upload</h2>
+    <form method="post" action="/admin/files/upload" enctype="multipart/form-data" class="flex gap-2">
+      <input type="file" name="file" required accept=".mp3,.wav,.flac,.ogg,.oga,.m4a,.aac" class="text-sm">
+      <button class="bg-white text-neutral-900 px-3 py-1 rounded text-sm">Upload</button>
+    </form>
+  </section>
+
+  <section class="bg-neutral-900 rounded-xl p-4">
+    <h2 class="font-semibold mb-2">Library ({{len .Tracks}})</h2>
+    <div class="overflow-y-auto max-h-[60vh]">
+    <table class="w-full text-sm">
+      <thead class="text-left text-neutral-500 text-xs uppercase">
+        <tr><th class="py-1">Track</th><th>Album</th><th class="text-right">Actions</th></tr>
+      </thead>
+      <tbody>
+        {{range .Tracks}}
+        <tr class="border-t border-neutral-800">
+          <td class="py-1 pr-2">{{displayTitle .Title .Artist}}</td>
+          <td class="text-neutral-500 pr-2">{{.Album}}</td>
+          <td class="text-right whitespace-nowrap">
+            <form method="post" action="/admin/queue" class="inline">
+              <input type="hidden" name="id" value="{{.ID}}">
+              <button class="text-neutral-300 hover:text-white text-xs px-2">queue</button>
+            </form>
+            <form method="post" action="/admin/files/rename" class="inline" onsubmit="this.elements.name.value = prompt('New filename', ''); return !!this.elements.name.value">
+              <input type="hidden" name="id" value="{{.ID}}">
+              <input type="hidden" name="name" value="">
+              <button class="text-neutral-300 hover:text-white text-xs px-2">rename</button>
+            </form>
+            <form method="post" action="/admin/files/delete" class="inline" onsubmit="return confirm('Delete this file?')">
+              <input type="hidden" name="id" value="{{.ID}}">
+              <button class="text-red-400 hover:text-red-300 text-xs px-2">delete</button>
+            </form>
+          </td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+    </div>
+  </section>
+</body>
+</html>{{end}}
