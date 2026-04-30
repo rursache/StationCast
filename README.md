@@ -161,15 +161,6 @@ Everything in `STATIONCAST_DATA_DIR`:
 
 Safe to delete: HLS segments and the SQLite file (it will rebuild from the music directory). Album art is rebuilt on next play if embedded, or re-fetched on next library scan if from iTunes
 
-## Releases
-
-Tag a commit `vX.Y.Z` and the GitHub Action builds and publishes a multi-arch image (`linux/amd64`, `linux/arm64`) to `ghcr.io/rursache/stationcast`
-
-```sh
-git tag v1.0.0
-git push origin v1.0.0
-```
-
 ## License
 
 MIT
