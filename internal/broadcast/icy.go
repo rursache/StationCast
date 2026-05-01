@@ -38,11 +38,27 @@ func WriteEmptyICYBlock(w io.Writer) error {
 	return err
 }
 
+// sanitizeMeta strips characters that could break ICY framing or confuse
+// stream parsers: the single-quote and semicolon delimiters used by the
+// StreamTitle key, plus all bytes below 0x20 (CR, LF, NUL, other control
+// codes) which some clients treat as record separators
 func sanitizeMeta(s string) string {
-	s = strings.ReplaceAll(s, "'", " ")
-	s = strings.ReplaceAll(s, ";", ",")
-	s = strings.ReplaceAll(s, "\x00", "")
-	return s
+	var b strings.Builder
+	b.Grow(len(s))
+	for _, r := range s {
+		if r < 0x20 {
+			continue
+		}
+		switch r {
+		case '\'':
+			b.WriteByte(' ')
+		case ';':
+			b.WriteByte(',')
+		default:
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
 }
 
 // ICYStream pumps audio from a Subscriber into w, inserting metadata blocks

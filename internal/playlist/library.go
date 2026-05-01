@@ -342,6 +342,9 @@ func saveArt(dataDir string, id int64, path string) error {
 	if pic == nil || len(pic.Data) == 0 {
 		return errors.New("no embedded art")
 	}
+	if len(pic.Data) > maxArtBytes {
+		return fmt.Errorf("embedded art exceeds %d byte limit", maxArtBytes)
+	}
 	out := filepath.Join(dataDir, "art", fmt.Sprintf("%d.jpg", id))
 	return os.WriteFile(out, pic.Data, 0o644)
 }

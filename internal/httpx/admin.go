@@ -2,6 +2,7 @@ package httpx
 
 import (
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"sort"
 	"strconv"
@@ -119,7 +120,8 @@ func (s *Server) handleSetMode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := s.sched.SetMode(m); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		slog.Error("set mode", "mode", m, "err", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
 	http.Redirect(w, r, "/admin/", http.StatusSeeOther)
@@ -136,7 +138,8 @@ func (s *Server) handleEnqueue(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := s.sched.Enqueue(id); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		slog.Warn("enqueue", "id", id, "err", err)
+		http.Error(w, "enqueue failed", http.StatusBadRequest)
 		return
 	}
 	http.Redirect(w, r, "/admin/", http.StatusSeeOther)
@@ -153,7 +156,8 @@ func (s *Server) handleDequeue(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := s.sched.Dequeue(idx); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		slog.Warn("dequeue", "idx", idx, "err", err)
+		http.Error(w, "dequeue failed", http.StatusBadRequest)
 		return
 	}
 	http.Redirect(w, r, "/admin/", http.StatusSeeOther)
@@ -199,12 +203,14 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 	// configured size still fits
 	r.Body = http.MaxBytesReader(w, r.Body, files.MaxUploadBytes+4096)
 	if err := r.ParseMultipartForm(32 << 20); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		slog.Warn("upload: parse multipart", "err", err)
+		http.Error(w, "invalid upload", http.StatusBadRequest)
 		return
 	}
 	file, header, err := r.FormFile("file")
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		slog.Warn("upload: form file", "err", err)
+		http.Error(w, "invalid upload", http.StatusBadRequest)
 		return
 	}
 	defer file.Close()

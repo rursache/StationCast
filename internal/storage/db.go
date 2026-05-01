@@ -4,7 +4,9 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
+	"time"
 
 	_ "modernc.org/sqlite"
 )
@@ -14,7 +16,8 @@ type DB struct {
 }
 
 func Open(dataDir string) (*DB, error) {
-	dsn := "file:" + filepath.Join(dataDir, "stationcast.db") + "?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)&_pragma=foreign_keys(1)"
+	path := filepath.Join(dataDir, "stationcast.db")
+	dsn := "file:" + path + "?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)&_pragma=foreign_keys(1)"
 	sqldb, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, err
@@ -23,6 +26,12 @@ func Open(dataDir string) (*DB, error) {
 	if err := sqldb.Ping(); err != nil {
 		return nil, err
 	}
+	// Tighten permissions on the DB file (and the WAL/SHM siblings) so other
+	// local users on a shared host cannot read track paths, history, or
+	// settings. SQLite created them with the process umask
+	for _, suffix := range []string{"", "-wal", "-shm"} {
+		_ = os.Chmod(path+suffix, 0o600)
+	}
 	db := &DB{sqldb}
 	if err := db.migrate(); err != nil {
 		return nil, fmt.Errorf("migrate: %w", err)
@@ -30,8 +39,13 @@ func Open(dataDir string) (*DB, error) {
 	return db, nil
 }
 
-var migrations = []string{
-	`CREATE TABLE IF NOT EXISTS tracks (
+type migration struct {
+	version int
+	sql     string
+}
+
+var migrations = []migration{
+	{1, `CREATE TABLE IF NOT EXISTS tracks (
 		id          INTEGER PRIMARY KEY AUTOINCREMENT,
 		path        TEXT NOT NULL UNIQUE,
 		size        INTEGER NOT NULL,
@@ -42,54 +56,67 @@ var migrations = []string{
 		duration_ms INTEGER,
 		has_art     INTEGER NOT NULL DEFAULT 0,
 		added_at    INTEGER NOT NULL
-	)`,
-	`CREATE INDEX IF NOT EXISTS idx_tracks_path ON tracks(path)`,
-	`ALTER TABLE tracks ADD COLUMN art_tried INTEGER NOT NULL DEFAULT 0`,
-	`CREATE TABLE IF NOT EXISTS history (
+	)`},
+	{2, `CREATE INDEX IF NOT EXISTS idx_tracks_path ON tracks(path)`},
+	{3, `ALTER TABLE tracks ADD COLUMN art_tried INTEGER NOT NULL DEFAULT 0`},
+	{4, `CREATE TABLE IF NOT EXISTS history (
 		id        INTEGER PRIMARY KEY AUTOINCREMENT,
 		track_id  INTEGER NOT NULL,
 		played_at INTEGER NOT NULL
-	)`,
-	`CREATE INDEX IF NOT EXISTS idx_history_played_at ON history(played_at DESC)`,
-	`CREATE TABLE IF NOT EXISTS queue (
+	)`},
+	{5, `CREATE INDEX IF NOT EXISTS idx_history_played_at ON history(played_at DESC)`},
+	{6, `CREATE TABLE IF NOT EXISTS queue (
 		id       INTEGER PRIMARY KEY AUTOINCREMENT,
 		track_id INTEGER NOT NULL,
 		position INTEGER NOT NULL
-	)`,
-	`CREATE TABLE IF NOT EXISTS settings (
+	)`},
+	{7, `CREATE TABLE IF NOT EXISTS settings (
 		key   TEXT PRIMARY KEY,
 		value TEXT NOT NULL
-	)`,
+	)`},
 }
 
 func (db *DB) migrate() error {
-	for i, stmt := range migrations {
-		if _, err := db.Exec(stmt); err != nil {
-			// Tolerate "duplicate column" on ALTER TABLE re-runs; SQLite has no IF NOT EXISTS for columns
-			if isDuplicateColumn(err) {
-				continue
+	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS schema_migrations (
+		version    INTEGER PRIMARY KEY,
+		applied_at INTEGER NOT NULL
+	)`); err != nil {
+		return err
+	}
+
+	// Pre-versioned databases already carry the legacy schema but no rows in
+	// schema_migrations. Detect that case (tracks table present, migrations
+	// table empty) and seed the version log so the non-idempotent statements
+	// (ALTER TABLE ADD COLUMN) do not re-run on upgrade
+	var legacyTracks int
+	_ = db.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='tracks'`).Scan(&legacyTracks)
+	var applied int
+	_ = db.QueryRow(`SELECT COUNT(*) FROM schema_migrations`).Scan(&applied)
+	if legacyTracks > 0 && applied == 0 {
+		now := time.Now().Unix()
+		for _, m := range migrations {
+			if _, err := db.Exec(`INSERT INTO schema_migrations(version, applied_at) VALUES(?, ?)`, m.version, now); err != nil {
+				return fmt.Errorf("seed schema_migrations: %w", err)
 			}
-			return fmt.Errorf("migration %d: %w", i, err)
+		}
+	}
+
+	for _, m := range migrations {
+		var done int
+		if err := db.QueryRow(`SELECT COUNT(*) FROM schema_migrations WHERE version = ?`, m.version).Scan(&done); err != nil {
+			return err
+		}
+		if done > 0 {
+			continue
+		}
+		if _, err := db.Exec(m.sql); err != nil {
+			return fmt.Errorf("migration %d: %w", m.version, err)
+		}
+		if _, err := db.Exec(`INSERT INTO schema_migrations(version, applied_at) VALUES(?, ?)`, m.version, time.Now().Unix()); err != nil {
+			return fmt.Errorf("record migration %d: %w", m.version, err)
 		}
 	}
 	return nil
-}
-
-func isDuplicateColumn(err error) bool {
-	if err == nil {
-		return false
-	}
-	s := err.Error()
-	return contains(s, "duplicate column") || contains(s, "already exists")
-}
-
-func contains(s, sub string) bool {
-	for i := 0; i+len(sub) <= len(s); i++ {
-		if s[i:i+len(sub)] == sub {
-			return true
-		}
-	}
-	return false
 }
 
 func (db *DB) GetSetting(key string) (string, error) {

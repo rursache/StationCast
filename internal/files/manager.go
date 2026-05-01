@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -44,7 +45,11 @@ func (m *Manager) Rename(id int64, newName string) error {
 	if _, err := os.Stat(newPath); err == nil {
 		return errors.New("target already exists")
 	}
-	return os.Rename(t.Path, newPath)
+	if err := os.Rename(t.Path, newPath); err != nil {
+		slog.Error("file rename", "from", t.Path, "to", newPath, "err", err)
+		return errors.New("rename failed")
+	}
+	return nil
 }
 
 func (m *Manager) Delete(id int64) error {
@@ -52,7 +57,18 @@ func (m *Manager) Delete(id int64) error {
 	if !ok {
 		return errors.New("track not found")
 	}
-	return os.Remove(t.Path)
+	// Defence in depth: re-validate that the tracked path is still inside the
+	// configured music root before unlinking. The library scanner already
+	// rejects symlinks and out-of-root paths, so this should always pass
+	rel, err := filepath.Rel(m.cfg.MusicDir, t.Path)
+	if err != nil || strings.HasPrefix(rel, "..") || rel == ".." {
+		return errors.New("invalid path")
+	}
+	if err := os.Remove(t.Path); err != nil {
+		slog.Error("file delete", "path", t.Path, "err", err)
+		return errors.New("delete failed")
+	}
+	return nil
 }
 
 // MaxUploadBytes caps the size of a single uploaded audio file
@@ -75,14 +91,16 @@ func (m *Manager) Save(name string, r io.Reader) error {
 	}
 	f, err := os.Create(dst)
 	if err != nil {
-		return err
+		slog.Error("file save: create", "path", dst, "err", err)
+		return errors.New("upload failed")
 	}
 	defer f.Close()
 	// Cap copy size as defence-in-depth - the HTTP layer also wraps the
 	// request body with MaxBytesReader
 	if _, err := io.Copy(f, io.LimitReader(r, MaxUploadBytes+1)); err != nil {
 		_ = os.Remove(dst)
-		return err
+		slog.Error("file save: copy", "path", dst, "err", err)
+		return errors.New("upload failed")
 	}
 	if st, err := f.Stat(); err == nil && st.Size() > MaxUploadBytes {
 		_ = os.Remove(dst)

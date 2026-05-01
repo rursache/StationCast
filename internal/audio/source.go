@@ -47,8 +47,9 @@ func (s *pcmSource) Read(p []byte) (int, error) {
 			s.eng.curCmd = cmd
 			s.eng.mu.Unlock()
 			s.eng.sched.MarkPlaying(t)
-			s.eng.hub.SetMetadata(t.DisplayTitle())
-			slog.Info("now playing", "id", t.ID, "title", t.DisplayTitle())
+			line := t.DisplayLine(s.eng.cfg.StationName)
+			s.eng.hub.SetMetadata(line)
+			slog.Info("now playing", "id", t.ID, "title", line)
 		}
 		n, err := s.curOut.Read(p)
 		if n > 0 {

@@ -200,8 +200,11 @@ func (s *Scheduler) ShouldSkip() bool {
 // Pick chooses the next track per mode, respecting manual queue priority.
 // Returns nil if library is empty.
 func (s *Scheduler) Pick() *Track {
-	s.mu.Lock()
-	if len(s.manual) > 0 {
+	for {
+		s.mu.Lock()
+		if len(s.manual) == 0 {
+			break
+		}
 		id := s.manual[0]
 		s.manual = s.manual[1:]
 		snapshot := append([]int64(nil), s.manual...)
@@ -210,7 +213,8 @@ func (s *Scheduler) Pick() *Track {
 		if t, ok := s.lib.Get(id); ok {
 			return t
 		}
-		return s.Pick()
+		// Stale queue entry, keep draining until we hit a valid track or
+		// fall through to the autopick branch
 	}
 	mode := s.mode
 	cur := s.current

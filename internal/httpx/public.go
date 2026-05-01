@@ -31,7 +31,7 @@ func (s *Server) currentNowPlaying() nowPlaying {
 	}
 	if t := s.sched.Current(); t != nil {
 		np.Title = t.Title
-		np.Artist = t.Artist
+		np.Artist = t.DisplayArtist(s.cfg.StationName)
 		np.Album = t.Album
 		np.HasArt = t.HasArt
 		if t.HasArt {
@@ -40,7 +40,7 @@ func (s *Server) currentNowPlaying() nowPlaying {
 	}
 	if next := s.sched.Peek(); next != nil {
 		np.NextTitle = next.Title
-		np.NextArtist = next.Artist
+		np.NextArtist = next.DisplayArtist(s.cfg.StationName)
 	}
 	return np
 }
