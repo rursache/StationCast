@@ -74,6 +74,9 @@ STATIONCAST_DATA_DIR=./data \
 | `STATIONCAST_LOUDNORM` | `false` | Apply per-track ffmpeg `loudnorm` so volume does not jump between tracks |
 | `STATIONCAST_GAIN_DB` | `0` | Source volume boost in dB (range -20 to +20). Applied after loudnorm so it stacks. Aggressive positive values combined with loudnorm can clip the output (loudnorm targets a true-peak of -1.5 dBTP, so anything above +1 dB will start to push peaks above 0 dB) |
 | `STATIONCAST_ITUNES_ART` | `true` | Fetch missing album art from the iTunes Search API when artist + album tags exist |
+| `STATIONCAST_MAX_LISTENERS` | `256` | Hard cap on concurrent `/stream` connections. Excess listeners get HTTP 503. Set to `0` for unlimited (not recommended) |
+| `STATIONCAST_RECAPTCHA_SITE_KEY` | `` | Optional Google reCAPTCHA v2 site key. When set together with the secret, the login form requires a captcha challenge |
+| `STATIONCAST_RECAPTCHA_SECRET_KEY` | `` | Optional Google reCAPTCHA v2 secret. Verified against the siteverify endpoint on every login attempt |
 
 ## Endpoints
 

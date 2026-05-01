@@ -69,9 +69,12 @@ func (s *pcmSource) Read(p []byte) (int, error) {
 }
 
 func (s *pcmSource) startDecoder(t *playlist.Track) (*exec.Cmd, io.ReadCloser, error) {
+	// Force ffmpeg to treat the path as a file via the explicit file: protocol
+	// prefix. This neutralises any case where a filename could otherwise be
+	// misparsed as an option flag
 	args := []string{
 		"-hide_banner", "-loglevel", "warning",
-		"-i", t.Path,
+		"-i", "file:" + t.Path,
 	}
 	if filter := buildAudioFilter(s.eng.cfg.LoudNorm, s.eng.cfg.GainDB); filter != "" {
 		args = append(args, "-af", filter)

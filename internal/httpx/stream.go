@@ -16,6 +16,14 @@ import (
 func (s *Server) handleStream(w http.ResponseWriter, r *http.Request) {
 	wantMeta := r.Header.Get("Icy-MetaData") == "1"
 
+	sub := s.hub.Subscribe()
+	if sub == nil {
+		w.Header().Set("Retry-After", "30")
+		http.Error(w, "stream at capacity", http.StatusServiceUnavailable)
+		return
+	}
+	defer sub.Close()
+
 	h := w.Header()
 	h.Set("Content-Type", "audio/mpeg")
 	h.Set("Cache-Control", "no-cache, no-store")
@@ -36,9 +44,6 @@ func (s *Server) handleStream(w http.ResponseWriter, r *http.Request) {
 			flusher.Flush()
 		}
 	}
-
-	sub := s.hub.Subscribe()
-	defer sub.Close()
 
 	titleFn := func() string {
 		t := s.hub.Metadata()

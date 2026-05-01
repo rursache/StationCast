@@ -1,6 +1,7 @@
 package httpx
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/subtle"
 	"encoding/hex"
@@ -9,7 +10,11 @@ import (
 	"time"
 )
 
-const sessionCookie = "stationcast_session"
+const (
+	sessionCookie = "stationcast_session"
+	sessionTTL    = 90 * 24 * time.Hour
+	sweepInterval = 1 * time.Hour
+)
 
 type AuthStore struct {
 	password string
@@ -44,14 +49,48 @@ func (a *AuthStore) Valid(tok string) bool {
 	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	_, ok := a.tokens[tok]
-	return ok
+	issued, ok := a.tokens[tok]
+	if !ok {
+		return false
+	}
+	if time.Since(issued) > sessionTTL {
+		delete(a.tokens, tok)
+		return false
+	}
+	return true
 }
 
 func (a *AuthStore) Revoke(tok string) {
 	a.mu.Lock()
 	delete(a.tokens, tok)
 	a.mu.Unlock()
+}
+
+// Sweep walks the token map and evicts expired entries. Called periodically
+// from a goroutine so dead tokens don't accumulate forever in memory
+func (a *AuthStore) Sweep() {
+	cutoff := time.Now().Add(-sessionTTL)
+	a.mu.Lock()
+	for tok, issued := range a.tokens {
+		if issued.Before(cutoff) {
+			delete(a.tokens, tok)
+		}
+	}
+	a.mu.Unlock()
+}
+
+// RunSweeper runs Sweep on an interval until ctx is done
+func (a *AuthStore) RunSweeper(ctx context.Context) {
+	t := time.NewTicker(sweepInterval)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			a.Sweep()
+		}
+	}
 }
 
 func (s *Server) requireAuth(next http.Handler) http.Handler {
@@ -63,4 +102,17 @@ func (s *Server) requireAuth(next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+// requestIsHTTPS reports whether the incoming request reached us over TLS,
+// either directly or via a reverse proxy that set X-Forwarded-Proto. We
+// only honour the forwarded header when it looks well-formed
+func requestIsHTTPS(r *http.Request) bool {
+	if r.TLS != nil {
+		return true
+	}
+	if proto := r.Header.Get("X-Forwarded-Proto"); proto == "https" {
+		return true
+	}
+	return false
 }

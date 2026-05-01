@@ -6,6 +6,7 @@
   <title>{{.StationName}} - Admin</title>
   <link rel="icon" type="image/svg+xml" href="/static/icon.svg">
   <script src="https://cdn.tailwindcss.com"></script>
+  {{if .RecaptchaSiteKey}}<script src="https://www.google.com/recaptcha/api.js" async defer></script>{{end}}
 </head>
 <body class="min-h-screen flex items-center justify-center p-6">
   <form method="post" action="/admin/login" class="w-full max-w-sm bg-neutral-900 rounded-xl p-6 space-y-4">
@@ -15,6 +16,9 @@
     </div>
     <input name="password" type="password" required autofocus placeholder="Password"
       class="w-full bg-neutral-950 border border-neutral-800 rounded px-3 py-2">
+    {{if .RecaptchaSiteKey}}
+    <div class="g-recaptcha flex justify-center" data-sitekey="{{.RecaptchaSiteKey}}" data-theme="dark"></div>
+    {{end}}
     <button type="submit" class="w-full bg-white text-neutral-900 rounded px-3 py-2 font-medium">Sign in</button>
   </form>
 </body>

@@ -80,7 +80,7 @@ func (m *HLSManager) runOnce(ctx context.Context) error {
 		return err
 	}
 
-	sub := m.hub.Subscribe()
+	sub := m.hub.SubscribeInternal()
 	defer sub.Close()
 
 	done := make(chan error, 1)

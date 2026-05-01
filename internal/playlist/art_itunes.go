@@ -3,9 +3,11 @@ package playlist
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -19,6 +21,7 @@ const (
 	itunesUA       = "StationCast/1.0 (https://github.com/rursache/StationCast)"
 	itunesArtSize  = "600x600"
 	itunesPause    = 600 * time.Millisecond
+	maxArtBytes    = 10 << 20
 )
 
 type itunesResp struct {
@@ -94,15 +97,45 @@ func downloadTo(ctx context.Context, client *http.Client, url, dst string) error
 	if err != nil {
 		return err
 	}
-	if _, err := io.Copy(f, resp.Body); err != nil {
+	// Cap at maxArtBytes+1 so we can detect oversize bodies without buffering them
+	n, err := io.Copy(f, io.LimitReader(resp.Body, maxArtBytes+1))
+	if err != nil {
 		f.Close()
 		_ = os.Remove(tmp)
 		return err
+	}
+	if n > maxArtBytes {
+		f.Close()
+		_ = os.Remove(tmp)
+		return fmt.Errorf("art exceeds %d byte limit", maxArtBytes)
 	}
 	if err := f.Close(); err != nil {
 		return err
 	}
 	return os.Rename(tmp, dst)
+}
+
+// safeRedirect blocks redirects to non-HTTPS schemes or to private,
+// loopback, or link-local hosts. Used as the http.Client CheckRedirect for
+// the iTunes art fetcher to neuter SSRF-via-redirect
+func safeRedirect(req *http.Request, via []*http.Request) error {
+	if len(via) >= 5 {
+		return errors.New("too many redirects")
+	}
+	if req.URL.Scheme != "https" {
+		return fmt.Errorf("redirect to non-https scheme: %s", req.URL.Scheme)
+	}
+	host := req.URL.Hostname()
+	ips, err := net.LookupIP(host)
+	if err != nil {
+		return fmt.Errorf("resolve %s: %w", host, err)
+	}
+	for _, ip := range ips {
+		if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsUnspecified() {
+			return fmt.Errorf("redirect to disallowed address: %s", ip)
+		}
+	}
+	return nil
 }
 
 // FetchMissingArt walks the library, looks up album art on iTunes for tracks
@@ -113,7 +146,10 @@ func (l *Library) FetchMissingArt(ctx context.Context) {
 	if !l.cfg.ITunesArt {
 		return
 	}
-	client := &http.Client{Timeout: 10 * time.Second}
+	client := &http.Client{
+		Timeout:       10 * time.Second,
+		CheckRedirect: safeRedirect,
+	}
 
 	rows, err := l.db.Query(`SELECT id, artist, album FROM tracks
 		WHERE has_art = 0 AND art_tried = 0 AND artist <> '' AND album <> ''`)

@@ -20,7 +20,8 @@ func (s *Subscriber) Close() {
 }
 
 type Hub struct {
-	bitrate int
+	bitrate      int
+	maxListeners int // 0 = unlimited
 
 	mu     sync.Mutex
 	subs   map[*Subscriber]struct{}
@@ -40,6 +41,15 @@ func NewHub(bitrate int) *Hub {
 }
 
 func (h *Hub) Bitrate() int { return h.bitrate }
+
+// SetMaxListeners caps the number of concurrent client subscribers.
+// Zero means unlimited. Internal subscribers (HLS feeder) bypass this cap
+// via SubscribeInternal
+func (h *Hub) SetMaxListeners(n int) {
+	h.mu.Lock()
+	h.maxListeners = n
+	h.mu.Unlock()
+}
 
 func (h *Hub) Metadata() string { return *h.meta.Load() }
 
@@ -70,7 +80,32 @@ func (h *Hub) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
+// Subscribe registers a client listener. Returns nil if the configured cap
+// is reached. The HLS feeder uses SubscribeInternal to bypass the cap
 func (h *Hub) Subscribe() *Subscriber {
+	s := &Subscriber{
+		hub: h,
+		ch:  make(chan []byte, subBufferChunks),
+	}
+	h.mu.Lock()
+	if h.closed {
+		h.mu.Unlock()
+		close(s.ch)
+		return s
+	}
+	if h.maxListeners > 0 && len(h.subs) >= h.maxListeners {
+		h.mu.Unlock()
+		close(s.ch)
+		return nil
+	}
+	h.subs[s] = struct{}{}
+	h.mu.Unlock()
+	return s
+}
+
+// SubscribeInternal is for in-process consumers (the HLS feeder) that must
+// not be subject to the listener cap
+func (h *Hub) SubscribeInternal() *Subscriber {
 	s := &Subscriber{
 		hub: h,
 		ch:  make(chan []byte, subBufferChunks),

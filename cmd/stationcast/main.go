@@ -34,6 +34,8 @@ func main() {
 		"bitrate", cfg.Bitrate,
 		"loudnorm", cfg.LoudNorm,
 		"gain_db", cfg.GainDB,
+		"max_listeners", cfg.MaxListeners,
+		"recaptcha", cfg.RecaptchaSiteKey != "",
 	)
 
 	db, err := storage.Open(cfg.DataDir)
@@ -54,6 +56,7 @@ func main() {
 	go lib.FetchMissingArt(ctx)
 
 	hub := broadcast.NewHub(cfg.Bitrate)
+	hub.SetMaxListeners(cfg.MaxListeners)
 	hls := broadcast.NewHLSManager(hub, cfg.DataDir)
 	go hls.Run(ctx)
 
@@ -65,10 +68,18 @@ func main() {
 	engine := audio.NewEngine(cfg, sched, hub)
 	go engine.Run(ctx)
 
+	router, authSweep := httpx.NewRouter(cfg, db, lib, sched, hub, hls, engine)
+	go authSweep(ctx)
+
+	// Streaming endpoints rely on long-lived writes, so we cannot set a global
+	// WriteTimeout. ReadHeaderTimeout caps slow header attacks; IdleTimeout
+	// reaps zombie keep-alives. Per-route ReadTimeout is enforced inside the
+	// admin router for non-streaming POST endpoints
 	srv := &http.Server{
 		Addr:              cfg.Addr,
-		Handler:           httpx.NewRouter(cfg, db, lib, sched, hub, hls, engine),
+		Handler:           router,
 		ReadHeaderTimeout: 10 * time.Second,
+		IdleTimeout:       120 * time.Second,
 	}
 
 	stop := make(chan os.Signal, 1)

@@ -10,30 +10,35 @@ import (
 )
 
 type Config struct {
-	MusicDir      string
-	DataDir       string
-	Addr          string
-	PublicURL     string
-	AdminPassword string
-	Bitrate       int
-	StationName   string
-	StationGenre  string
-	LoudNorm      bool
-	ITunesArt     bool
-	GainDB        int
+	MusicDir         string
+	DataDir          string
+	Addr             string
+	PublicURL        string
+	AdminPassword    string
+	Bitrate          int
+	StationName      string
+	StationGenre     string
+	LoudNorm         bool
+	ITunesArt        bool
+	GainDB           int
+	MaxListeners     int
+	RecaptchaSiteKey string
+	RecaptchaSecret  string
 }
 
 func Load() (*Config, error) {
 	cfg := &Config{
-		MusicDir:      env("STATIONCAST_MUSIC_DIR", "./music"),
-		DataDir:       env("STATIONCAST_DATA_DIR", "./data"),
-		Addr:          env("STATIONCAST_ADDR", ":8000"),
-		PublicURL:     env("STATIONCAST_PUBLIC_URL", ""),
-		AdminPassword: os.Getenv("STATIONCAST_ADMIN_PASSWORD"),
-		StationName:   env("STATIONCAST_STATION_NAME", "StationCast"),
-		StationGenre: env("STATIONCAST_STATION_GENRE", "Various"),
-		LoudNorm:     envBool("STATIONCAST_LOUDNORM", false),
-		ITunesArt:    envBool("STATIONCAST_ITUNES_ART", true),
+		MusicDir:         env("STATIONCAST_MUSIC_DIR", "./music"),
+		DataDir:          env("STATIONCAST_DATA_DIR", "./data"),
+		Addr:             env("STATIONCAST_ADDR", ":8000"),
+		PublicURL:        env("STATIONCAST_PUBLIC_URL", ""),
+		AdminPassword:    os.Getenv("STATIONCAST_ADMIN_PASSWORD"),
+		StationName:      env("STATIONCAST_STATION_NAME", "StationCast"),
+		StationGenre:     env("STATIONCAST_STATION_GENRE", "Various"),
+		LoudNorm:         envBool("STATIONCAST_LOUDNORM", false),
+		ITunesArt:        envBool("STATIONCAST_ITUNES_ART", true),
+		RecaptchaSiteKey: os.Getenv("STATIONCAST_RECAPTCHA_SITE_KEY"),
+		RecaptchaSecret:  os.Getenv("STATIONCAST_RECAPTCHA_SECRET_KEY"),
 	}
 
 	br, err := strconv.Atoi(env("STATIONCAST_BITRATE", "128"))
@@ -52,6 +57,12 @@ func Load() (*Config, error) {
 		gain = 20
 	}
 	cfg.GainDB = gain
+
+	maxL, err := strconv.Atoi(env("STATIONCAST_MAX_LISTENERS", "256"))
+	if err != nil || maxL < 0 {
+		return nil, fmt.Errorf("invalid STATIONCAST_MAX_LISTENERS")
+	}
+	cfg.MaxListeners = maxL
 
 	if cfg.AdminPassword == "" {
 		return nil, errors.New("STATIONCAST_ADMIN_PASSWORD is required")
@@ -80,6 +91,13 @@ func Load() (*Config, error) {
 	}
 	if err := os.MkdirAll(filepath.Join(cfg.DataDir, "hls"), 0o755); err != nil {
 		return nil, err
+	}
+
+	// Resolve MusicDir symlinks once so all downstream "is this path inside the
+	// music root?" checks work against a canonical root. Docker bind mounts are
+	// not symlinks and pass through unchanged
+	if resolved, err := filepath.EvalSymlinks(cfg.MusicDir); err == nil {
+		cfg.MusicDir = resolved
 	}
 
 	return cfg, nil

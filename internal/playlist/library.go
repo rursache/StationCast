@@ -28,6 +28,12 @@ var supportedExt = map[string]bool{
 	".aac":  true,
 }
 
+// IsSupportedExt reports whether the given filename has a supported audio
+// extension (matched case-insensitively against the library scanner's set)
+func IsSupportedExt(name string) bool {
+	return supportedExt[strings.ToLower(filepath.Ext(name))]
+}
+
 type Library struct {
 	cfg *config.Config
 	db  *storage.DB
@@ -145,6 +151,21 @@ func (l *Library) reconcileRemoved(seen map[string]bool) {
 }
 
 func (l *Library) upsertFile(path string) error {
+	// Reject symlinks outright. Docker bind mounts are not symlinks so this
+	// only affects user-created links inside MUSIC_DIR. Also verify the path
+	// is still inside the (already symlink-resolved) music root so a symlinked
+	// directory deeper in the tree cannot escape
+	li, err := os.Lstat(path)
+	if err != nil {
+		return err
+	}
+	if li.Mode()&os.ModeSymlink != 0 {
+		return errors.New("symlinks are not allowed in the music directory")
+	}
+	rel, err := filepath.Rel(l.cfg.MusicDir, path)
+	if err != nil || strings.HasPrefix(rel, "..") || rel == ".." {
+		return errors.New("path outside music root")
+	}
 	st, err := os.Stat(path)
 	if err != nil {
 		return err

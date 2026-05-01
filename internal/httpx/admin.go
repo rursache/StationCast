@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/rursache/StationCast/internal/files"
 	"github.com/rursache/StationCast/internal/playlist"
 )
 
@@ -20,7 +21,7 @@ func (s *Server) sortedLibrary() []adminViewTrack {
 	view := make([]adminViewTrack, 0, len(tracks))
 	for _, t := range tracks {
 		view = append(view, adminViewTrack{
-			ID: t.ID, Path: t.Path, Title: t.Title, Artist: t.Artist, Album: t.Album, HasArt: t.HasArt,
+			ID: t.ID, Title: t.Title, Artist: t.Artist, Album: t.Album, HasArt: t.HasArt,
 		})
 	}
 	return view
@@ -33,13 +34,23 @@ func (s *Server) handleLibraryJSON(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleLoginPage(w http.ResponseWriter, r *http.Request) {
-	s.tmpl.Render(w, "login.html", map[string]any{"StationName": s.cfg.StationName})
+	s.tmpl.Render(w, "login.html", map[string]any{
+		"StationName":      s.cfg.StationName,
+		"RecaptchaSiteKey": s.cfg.RecaptchaSiteKey,
+	})
 }
 
 func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "bad form", http.StatusBadRequest)
 		return
+	}
+	if s.cfg.RecaptchaSecret != "" {
+		token := r.FormValue("g-recaptcha-response")
+		if !verifyRecaptcha(r.Context(), s.cfg.RecaptchaSecret, token, r.RemoteAddr) {
+			http.Redirect(w, r, "/admin/login?error=1", http.StatusSeeOther)
+			return
+		}
 	}
 	if !s.auth.Verify(r.FormValue("password")) {
 		http.Redirect(w, r, "/admin/login?error=1", http.StatusSeeOther)
@@ -51,7 +62,9 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		Value:    tok,
 		Path:     "/",
 		HttpOnly: true,
-		SameSite: http.SameSiteLaxMode,
+		Secure:   requestIsHTTPS(r),
+		SameSite: http.SameSiteStrictMode,
+		MaxAge:   int(sessionTTL.Seconds()),
 	})
 	http.Redirect(w, r, "/admin/", http.StatusSeeOther)
 }
@@ -66,7 +79,6 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 
 type adminViewTrack struct {
 	ID     int64  `json:"id"`
-	Path   string `json:"path"`
 	Title  string `json:"title"`
 	Artist string `json:"artist"`
 	Album  string `json:"album"`
@@ -182,7 +194,11 @@ func (s *Server) handleDelete(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
-	if err := r.ParseMultipartForm(512 << 20); err != nil {
+	// Cap the request body before parsing the multipart form. The +4096 leaves
+	// headroom for multipart framing overhead so a file of exactly the
+	// configured size still fits
+	r.Body = http.MaxBytesReader(w, r.Body, files.MaxUploadBytes+4096)
+	if err := r.ParseMultipartForm(32 << 20); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -192,6 +208,10 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer file.Close()
+	if header.Size > files.MaxUploadBytes {
+		http.Error(w, "file exceeds size limit", http.StatusRequestEntityTooLarge)
+		return
+	}
 	if err := s.files.Save(header.Filename, file); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
