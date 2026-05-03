@@ -30,7 +30,7 @@
   <!-- Now playing hero -->
   <section class="bg-neutral-900/60 backdrop-blur border border-neutral-800 rounded-2xl p-5 mb-6">
     <div class="flex flex-col md:flex-row gap-5">
-      <div class="w-32 h-32 md:w-36 md:h-36 rounded-xl overflow-hidden bg-neutral-800 flex-shrink-0 flex items-center justify-center">
+      <div id="np-art" class="w-32 h-32 md:w-36 md:h-36 rounded-xl overflow-hidden bg-neutral-800 flex-shrink-0 flex items-center justify-center">
         {{if and .Current .Current.HasArt}}
           <img src="/art/{{.Current.ID}}" alt="" class="w-full h-full object-cover">
         {{else}}
@@ -311,6 +311,20 @@
       }
       if (n) n.textContent = 'Up next: ' + (d.next_title ? (d.next_artist ? d.next_artist + ' - ' : '') + d.next_title : '—');
       if (l) l.textContent = d.listeners || 0;
+      const art = document.getElementById('np-art');
+      if (art) {
+        const fallback = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="w-12 h-12 text-neutral-600"><path stroke-linecap="round" stroke-linejoin="round" d="M9 19V5l12-2v14"/><circle cx="6" cy="19" r="3" stroke-linecap="round" stroke-linejoin="round"/><circle cx="18" cy="16" r="3" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+        if (d.has_art && d.art_url) {
+          const img = art.querySelector('img');
+          if (img && img.getAttribute('src') === d.art_url) {
+            // already showing this art, leave it alone
+          } else {
+            art.innerHTML = `<img src="${escapeHTML(d.art_url)}" alt="" class="w-full h-full object-cover">`;
+          }
+        } else if (!art.querySelector('svg')) {
+          art.innerHTML = fallback;
+        }
+      }
     } catch {}
   }
 
