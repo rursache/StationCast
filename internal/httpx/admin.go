@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -22,7 +23,12 @@ func (s *Server) sortedLibrary() []adminViewTrack {
 	view := make([]adminViewTrack, 0, len(tracks))
 	for _, t := range tracks {
 		view = append(view, adminViewTrack{
-			ID: t.ID, Title: t.Title, Artist: t.Artist, Album: t.Album, HasArt: t.HasArt,
+			ID:       t.ID,
+			Title:    t.Title,
+			Artist:   t.Artist,
+			Album:    t.Album,
+			Filename: filepath.Base(t.Path),
+			HasArt:   t.HasArt,
 		})
 	}
 	return view
@@ -79,11 +85,12 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 }
 
 type adminViewTrack struct {
-	ID     int64  `json:"id"`
-	Title  string `json:"title"`
-	Artist string `json:"artist"`
-	Album  string `json:"album"`
-	HasArt bool   `json:"has_art"`
+	ID       int64  `json:"id"`
+	Title    string `json:"title"`
+	Artist   string `json:"artist"`
+	Album    string `json:"album"`
+	Filename string `json:"filename"`
+	HasArt   bool   `json:"has_art"`
 }
 
 func (s *Server) handleAdminHome(w http.ResponseWriter, r *http.Request) {
