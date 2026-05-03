@@ -18,6 +18,10 @@ import (
 	"github.com/rursache/StationCast/internal/storage"
 )
 
+// version is set at build time via -ldflags '-X main.version=v1.2.3'
+// and falls back to "dev" for local builds
+var version = "dev"
+
 func main() {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	slog.SetDefault(logger)
@@ -27,7 +31,9 @@ func main() {
 		logger.Error("config", "err", err)
 		os.Exit(1)
 	}
+	cfg.Version = version
 	logger.Info("starting",
+		"version", version,
 		"music", cfg.MusicDir,
 		"data", cfg.DataDir,
 		"addr", cfg.Addr,

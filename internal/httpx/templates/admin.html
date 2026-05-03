@@ -134,7 +134,11 @@
           <button type="submit" class="w-full bg-red-700 hover:bg-red-600 text-white px-3 py-2 rounded-lg text-sm font-medium transition shadow-lg shadow-red-900/30">Upload</button>
         </form>
         <p class="text-center mt-3 pt-3 border-t border-neutral-800 text-xs text-neutral-600">
-          StationCast · <a href="https://github.com/rursache/StationCast" class="hover:text-neutral-400">github.com/rursache/StationCast</a>
+          {{if and .Version (ne .Version "dev")}}
+            <a href="https://github.com/rursache/StationCast/releases/tag/{{.Version}}" class="hover:text-neutral-400">StationCast {{.Version}}</a>
+          {{else}}
+            <a href="https://github.com/rursache/StationCast" class="hover:text-neutral-400">StationCast{{if .Version}} {{.Version}}{{end}}</a>
+          {{end}}
         </p>
       </section>
 

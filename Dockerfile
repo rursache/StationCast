@@ -7,6 +7,7 @@ FROM --platform=$BUILDPLATFORM golang:1-alpine AS build
 
 ARG TARGETOS
 ARG TARGETARCH
+ARG VERSION=dev
 
 WORKDIR /src
 
@@ -20,7 +21,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
     CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build \
     -trimpath \
-    -ldflags="-s -w" \
+    -ldflags="-s -w -X main.version=$VERSION" \
     -o /out/stationcast \
     ./cmd/stationcast
 

@@ -89,6 +89,7 @@ type adminViewTrack struct {
 func (s *Server) handleAdminHome(w http.ResponseWriter, r *http.Request) {
 	data := map[string]any{
 		"StationName": s.cfg.StationName,
+		"Version":     s.cfg.Version,
 		"Current":     s.sched.Current(),
 		"Next":        s.sched.Peek(),
 		"Mode":        string(s.sched.Mode()),

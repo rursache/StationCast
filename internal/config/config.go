@@ -10,6 +10,10 @@ import (
 )
 
 type Config struct {
+	// Version is the build-time version string injected via -ldflags
+	// '-X main.version=...' and forwarded into Config by main.go after Load
+	// returns. It is not an env var and is empty in non-production builds
+	Version          string
 	MusicDir         string
 	DataDir          string
 	Addr             string
