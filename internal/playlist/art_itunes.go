@@ -22,6 +22,14 @@ const (
 	itunesArtSize  = "600x600"
 	itunesPause    = 600 * time.Millisecond
 	maxArtBytes    = 10 << 20
+
+	// itunesLookupVersion is bumped whenever the iTunes search params change
+	// in a way that could yield different results (eg term composition or
+	// entity). Tracks with art_tried < itunesLookupVersion are eligible for a
+	// fresh lookup so the library benefits from the improved search. v2
+	// switched from album-by-(artist+album) to song-by-(artist+title), which
+	// returns correct artwork for modern singles
+	itunesLookupVersion = 2
 )
 
 type itunesResp struct {
@@ -31,28 +39,30 @@ type itunesResp struct {
 	} `json:"results"`
 }
 
-type albumKey struct {
+type songKey struct {
 	artist string
-	album  string
+	title  string
 }
 
 type artCandidate struct {
 	id     int64
 	artist string
-	album  string
+	title  string
 }
 
 func normKey(s string) string {
 	return strings.ToLower(strings.TrimSpace(s))
 }
 
-// FetchArtworkURL queries the iTunes Search API for an album cover URL.
-// Returns "" with no error when no result is found.
-func FetchArtworkURL(ctx context.Context, client *http.Client, artist, album string) (string, error) {
+// FetchArtworkURL queries the iTunes Search API for the artwork URL of the
+// song matching artist + title. Song-level entity lookup returns the correct
+// artwork even for singles that aren't tied to an album, which is the common
+// case for modern releases. Returns "" with no error when no result is found
+func FetchArtworkURL(ctx context.Context, client *http.Client, artist, title string) (string, error) {
 	q := url.Values{}
-	q.Set("term", artist+" "+album)
+	q.Set("term", artist+" "+title)
 	q.Set("media", "music")
-	q.Set("entity", "album")
+	q.Set("entity", "song")
 	q.Set("limit", "1")
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, itunesEndpoint+"?"+q.Encode(), nil)
 	if err != nil {
@@ -138,14 +148,16 @@ func safeRedirect(req *http.Request, via []*http.Request) error {
 	return nil
 }
 
-// FetchMissingArt walks the library and queries iTunes for album art on every
-// track that has artist + album metadata and has not been queried yet. When
-// iTunes returns artwork it is downloaded into data/art/<id>.jpg, overwriting
-// any embedded art that was extracted during scan; this gives iTunes priority
-// when STATIONCAST_ITUNES_ART is enabled. When iTunes returns nothing the
-// embedded art (if any) is left in place, otherwise the track has no art and
-// the UI shows the placeholder. Same album art is reused across all tracks of
-// the same artist+album. Each track is attempted at most once (`art_tried`)
+// FetchMissingArt walks the library and queries iTunes for artwork on every
+// track that has artist + title metadata and hasn't been queried at the
+// current itunesLookupVersion. When iTunes returns artwork it is downloaded
+// into data/art/<id>.jpg, overwriting any embedded art that was extracted
+// during scan; this gives iTunes priority when STATIONCAST_ITUNES_ART is
+// enabled. When iTunes returns nothing the embedded art (if any) is left in
+// place, otherwise the track has no art and the UI shows the placeholder.
+// Tracks sharing artist+title (eg duplicate files) are deduped into one
+// lookup. Bumping itunesLookupVersion automatically reopens previously-tried
+// tracks so libraries benefit from improved search params on upgrade
 func (l *Library) FetchMissingArt(ctx context.Context) {
 	if !l.cfg.ITunesArt {
 		return
@@ -155,8 +167,8 @@ func (l *Library) FetchMissingArt(ctx context.Context) {
 		CheckRedirect: safeRedirect,
 	}
 
-	rows, err := l.db.Query(`SELECT id, artist, album FROM tracks
-		WHERE art_tried = 0 AND artist <> '' AND album <> ''`)
+	rows, err := l.db.Query(`SELECT id, artist, title FROM tracks
+		WHERE art_tried < ? AND artist <> '' AND title <> ''`, itunesLookupVersion)
 	if err != nil {
 		slog.Warn("itunes: query", "err", err)
 		return
@@ -164,7 +176,7 @@ func (l *Library) FetchMissingArt(ctx context.Context) {
 	var pending []artCandidate
 	for rows.Next() {
 		var r artCandidate
-		if err := rows.Scan(&r.id, &r.artist, &r.album); err == nil {
+		if err := rows.Scan(&r.id, &r.artist, &r.title); err == nil {
 			pending = append(pending, r)
 		}
 	}
@@ -172,27 +184,27 @@ func (l *Library) FetchMissingArt(ctx context.Context) {
 	if len(pending) == 0 {
 		return
 	}
-	slog.Info("itunes: fetching missing album art", "candidates", len(pending))
+	slog.Info("itunes: fetching artwork", "candidates", len(pending))
 
-	byAlbum := map[albumKey][]artCandidate{}
-	var order []albumKey
+	bySong := map[songKey][]artCandidate{}
+	var order []songKey
 	for _, r := range pending {
-		k := albumKey{normKey(r.artist), normKey(r.album)}
-		if _, ok := byAlbum[k]; !ok {
+		k := songKey{normKey(r.artist), normKey(r.title)}
+		if _, ok := bySong[k]; !ok {
 			order = append(order, k)
 		}
-		byAlbum[k] = append(byAlbum[k], r)
+		bySong[k] = append(bySong[k], r)
 	}
 
 	for _, k := range order {
 		if ctx.Err() != nil {
 			return
 		}
-		group := byAlbum[k]
+		group := bySong[k]
 		first := group[0]
-		artURL, err := FetchArtworkURL(ctx, client, first.artist, first.album)
+		artURL, err := FetchArtworkURL(ctx, client, first.artist, first.title)
 		if err != nil {
-			slog.Debug("itunes: lookup failed", "artist", first.artist, "album", first.album, "err", err)
+			slog.Debug("itunes: lookup failed", "artist", first.artist, "title", first.title, "err", err)
 			l.markArtTried(group)
 			time.Sleep(itunesPause)
 			continue
@@ -215,21 +227,21 @@ func (l *Library) FetchMissingArt(ctx context.Context) {
 			}
 		}
 		for _, r := range group {
-			_, _ = l.db.Exec(`UPDATE tracks SET has_art = 1, art_tried = 1 WHERE id = ?`, r.id)
+			_, _ = l.db.Exec(`UPDATE tracks SET has_art = 1, art_tried = ? WHERE id = ?`, itunesLookupVersion, r.id)
 			l.mu.Lock()
 			if t, ok := l.byID[r.id]; ok {
 				t.HasArt = true
 			}
 			l.mu.Unlock()
 		}
-		slog.Info("itunes: art fetched", "artist", first.artist, "album", first.album, "tracks", len(group))
+		slog.Info("itunes: art fetched", "artist", first.artist, "title", first.title, "tracks", len(group))
 		time.Sleep(itunesPause)
 	}
 }
 
 func (l *Library) markArtTried(rows []artCandidate) {
 	for _, r := range rows {
-		_, _ = l.db.Exec(`UPDATE tracks SET art_tried = 1 WHERE id = ?`, r.id)
+		_, _ = l.db.Exec(`UPDATE tracks SET art_tried = ? WHERE id = ?`, itunesLookupVersion, r.id)
 	}
 }
 
