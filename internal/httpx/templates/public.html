@@ -60,6 +60,21 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-4 h-4 text-neutral-500"><path stroke-linecap="round" stroke-linejoin="round" d="M5 9v6h4l5 5V4L9 9H5zM15.54 8.46a5 5 0 010 7.07M19.07 4.93a10 10 0 010 14.14"/></svg>
     </div>
 
+    <div id="external-links" class="hidden items-center justify-center gap-5 -mt-1">
+      <a id="link-apple" href="#" target="_blank" rel="noopener noreferrer" aria-label="Open in Apple Music" title="Open in Apple Music"
+         class="opacity-50 hover:opacity-100 hover:scale-110 transition-all duration-200">
+        <img src="/static/apple-music.svg" alt="" class="w-5 h-5">
+      </a>
+      <a id="link-spotify" href="#" target="_blank" rel="noopener noreferrer" aria-label="Open in Spotify" title="Open in Spotify"
+         class="opacity-50 hover:opacity-100 hover:scale-110 transition-all duration-200">
+        <img src="/static/spotify.svg" alt="" class="w-5 h-5">
+      </a>
+      <a id="link-ytm" href="#" target="_blank" rel="noopener noreferrer" aria-label="Open in YouTube Music" title="Open in YouTube Music"
+         class="opacity-50 hover:opacity-100 hover:scale-110 transition-all duration-200">
+        <img src="/static/youtube-music.svg" alt="" class="w-5 h-5">
+      </a>
+    </div>
+
     <div class="w-full max-w-sm flex items-center gap-3">
       <button id="open-streams" type="button" class="flex-1 inline-flex items-center justify-center gap-2 bg-neutral-900/40 hover:bg-neutral-900/70 backdrop-blur border border-neutral-800 rounded-xl px-4 py-2.5 text-sm text-neutral-200 transition">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-4 h-4"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h7"/></svg>
@@ -73,36 +88,25 @@
   </main>
 
   <!-- Stream Links modal -->
-  <div id="modal-streams" class="fixed inset-0 z-20 hidden items-center justify-center p-6" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="modal-streams-title">
+  <div id="modal-streams" class="fixed inset-0 z-20 hidden items-center justify-center p-4 sm:p-6" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="modal-streams-title">
     <div class="modal-backdrop absolute inset-0 bg-black/70 backdrop-blur-sm"></div>
-    <div class="relative w-full max-w-md max-h-[80vh] flex flex-col bg-neutral-900/95 backdrop-blur border border-neutral-800 rounded-2xl shadow-2xl">
+    <div class="relative w-full max-w-md max-h-[85vh] flex flex-col bg-neutral-900/95 backdrop-blur border border-neutral-800 rounded-2xl shadow-2xl">
       <div class="flex items-center justify-between px-5 py-4 border-b border-neutral-800 flex-shrink-0">
         <h2 id="modal-streams-title" class="text-base font-semibold">Stream Links</h2>
         <button class="modal-close text-neutral-400 hover:text-white p-1" aria-label="Close">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-5 h-5"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
         </button>
       </div>
-      <div class="px-5 py-4 space-y-2 text-sm overflow-y-auto">
-        <div class="grid grid-cols-[5rem_1fr_auto] gap-2 items-center">
-          <span class="text-neutral-500 text-xs">Direct</span>
-          <input readonly value="{{.DirectURL}}" class="bg-neutral-950/60 border border-neutral-800 rounded px-2 py-1 text-xs truncate">
-          <button class="copy text-neutral-400 hover:text-white px-2 py-1 text-xs" data-copy="{{.DirectURL}}">copy</button>
-        </div>
-        <div class="grid grid-cols-[5rem_1fr_auto] gap-2 items-center">
-          <span class="text-neutral-500 text-xs">PLS</span>
-          <input readonly value="{{.PLSURL}}" class="bg-neutral-950/60 border border-neutral-800 rounded px-2 py-1 text-xs truncate">
-          <button class="copy text-neutral-400 hover:text-white px-2 py-1 text-xs" data-copy="{{.PLSURL}}">copy</button>
-        </div>
-        <div class="grid grid-cols-[5rem_1fr_auto] gap-2 items-center">
-          <span class="text-neutral-500 text-xs">M3U</span>
-          <input readonly value="{{.M3UURL}}" class="bg-neutral-950/60 border border-neutral-800 rounded px-2 py-1 text-xs truncate">
-          <button class="copy text-neutral-400 hover:text-white px-2 py-1 text-xs" data-copy="{{.M3UURL}}">copy</button>
-        </div>
-        <div class="grid grid-cols-[5rem_1fr_auto] gap-2 items-center">
-          <span class="text-neutral-500 text-xs">HLS</span>
-          <input readonly value="{{.HLSURL}}" class="bg-neutral-950/60 border border-neutral-800 rounded px-2 py-1 text-xs truncate">
-          <button class="copy text-neutral-400 hover:text-white px-2 py-1 text-xs" data-copy="{{.HLSURL}}">copy</button>
-        </div>
+      <div class="px-3 sm:px-4 py-3 sm:py-4 space-y-2 overflow-y-auto">
+        {{range $row := .StreamRows}}
+        <button type="button" class="copy w-full group flex items-center gap-3 bg-neutral-950/50 hover:bg-neutral-800/50 border border-neutral-800 hover:border-neutral-700 rounded-xl px-3 py-2.5 transition text-left" data-copy="{{$row.URL}}" title="Click to copy">
+          <span class="text-[10px] uppercase tracking-widest text-neutral-500 group-hover:text-neutral-300 font-semibold w-10 flex-shrink-0 transition">{{$row.Label}}</span>
+          <code class="flex-1 min-w-0 text-xs font-mono text-neutral-300 truncate">{{$row.URL}}</code>
+          <span class="copy-icon flex-shrink-0 text-neutral-500 group-hover:text-white transition">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-4 h-4"><rect x="9" y="9" width="13" height="13" rx="2"/><path stroke-linecap="round" stroke-linejoin="round" d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          </span>
+        </button>
+        {{end}}
       </div>
     </div>
   </div>

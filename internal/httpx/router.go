@@ -60,6 +60,7 @@ func NewRouter(cfg *config.Config, db *storage.DB, lib *playlist.Library, sched 
 
 	r.Get("/stream", s.handleStream)
 	r.Get("/stream.mp3", s.handleStream)
+	r.Get("/live", s.handleStream)
 	r.Get("/stream.pls", s.handlePLS)
 	r.Get("/stream.m3u", s.handleM3U)
 	r.Get("/hls.m3u8", s.handleHLSPlaylist)

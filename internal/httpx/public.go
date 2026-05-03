@@ -162,12 +162,15 @@ func (s *Server) handleArt(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handlePublicHome(w http.ResponseWriter, r *http.Request) {
+	type streamRow struct{ Label, URL string }
 	data := map[string]any{
 		"StationName": s.cfg.StationName,
-		"DirectURL":   s.streamURL(r, "/stream"),
-		"PLSURL":      s.streamURL(r, "/stream.pls"),
-		"M3UURL":      s.streamURL(r, "/stream.m3u"),
-		"HLSURL":      s.streamURL(r, "/hls.m3u8"),
+		"StreamRows": []streamRow{
+			{"Direct", s.streamURL(r, "/stream")},
+			{"PLS", s.streamURL(r, "/stream.pls")},
+			{"M3U", s.streamURL(r, "/stream.m3u")},
+			{"HLS", s.streamURL(r, "/hls.m3u8")},
+		},
 	}
 	s.tmpl.Render(w, "public.html", data)
 }

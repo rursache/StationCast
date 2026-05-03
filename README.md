@@ -147,7 +147,7 @@ The public web UI at `/` auto-picks HLS on iOS Safari and the direct MP3 stream 
 | `GET /now-playing` | Current track JSON |
 | `GET /now-playing/sse` | Server-Sent Events stream of now-playing changes |
 | `GET /art/:id` | Album art for a track id |
-| `GET /stream` (alias `/stream.mp3`) | MP3 stream with optional ICY metadata (`Icy-MetaData: 1` request header) |
+| `GET /stream` (aliases `/stream.mp3`, `/live`) | MP3 stream with optional ICY metadata (`Icy-MetaData: 1` request header) |
 | `GET /stream.pls` | PLS playlist file pointing at `/stream` |
 | `GET /stream.m3u` | Extended M3U pointing at `/stream` |
 | `GET /hls.m3u8` | HLS playlist (rolling window) for iOS / Apple Safari |

@@ -11,6 +11,10 @@
   const artFallback = document.getElementById('art-fallback');
   const listenersEl = document.getElementById('listeners');
   const backdrop = document.getElementById('backdrop');
+  const extLinks = document.getElementById('external-links');
+  const linkApple = document.getElementById('link-apple');
+  const linkSpotify = document.getElementById('link-spotify');
+  const linkYTM = document.getElementById('link-ytm');
 
   const ua = navigator.userAgent;
   const isApple = /iPhone|iPad|iPod|Macintosh/.test(ua) && /Safari/.test(ua) && !/Chrome|CriOS|FxiOS/.test(ua);
@@ -127,6 +131,20 @@
       }
       lastArtURL = '';
     }
+    if (extLinks) {
+      const q = [np.artist, np.title].filter(Boolean).join(' ').trim();
+      if (q && np.title) {
+        const enc = encodeURIComponent(q);
+        if (linkApple) linkApple.href = 'https://music.apple.com/search?term=' + enc;
+        if (linkSpotify) linkSpotify.href = 'https://open.spotify.com/search/' + enc;
+        if (linkYTM) linkYTM.href = 'https://music.youtube.com/search?q=' + enc;
+        extLinks.classList.remove('hidden');
+        extLinks.classList.add('flex');
+      } else {
+        extLinks.classList.add('hidden');
+        extLinks.classList.remove('flex');
+      }
+    }
     if (listenersEl) listenersEl.textContent = (np.listeners || 0);
     if ('mediaSession' in navigator) {
       navigator.mediaSession.metadata = new MediaMetadata({
@@ -148,15 +166,24 @@
   }
   connectSSE();
 
-  // Copy-to-clipboard for stream URLs
+  // Copy-to-clipboard for stream URLs. The button row shows a small clipboard
+  // icon at rest; on success we swap it for a check mark for ~1.2s
+  const checkSVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="w-4 h-4"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>`;
   document.querySelectorAll('button.copy').forEach(b => {
     b.addEventListener('click', async () => {
       try {
         await navigator.clipboard.writeText(b.dataset.copy);
-        const orig = b.textContent;
-        b.textContent = 'copied';
-        b.classList.add('text-emerald-400');
-        setTimeout(() => { b.textContent = orig; b.classList.remove('text-emerald-400'); }, 1200);
+        const icon = b.querySelector('.copy-icon');
+        if (!icon || icon.dataset.busy) return;
+        const orig = icon.innerHTML;
+        icon.dataset.busy = '1';
+        icon.innerHTML = checkSVG;
+        icon.classList.add('text-emerald-400');
+        setTimeout(() => {
+          icon.innerHTML = orig;
+          icon.classList.remove('text-emerald-400');
+          delete icon.dataset.busy;
+        }, 1200);
       } catch {}
     });
   });
@@ -214,8 +241,8 @@
                 : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="w-4 h-4 text-neutral-600"><path stroke-linecap="round" stroke-linejoin="round" d="M9 19V5l12-2v14"/><circle cx="6" cy="19" r="3" stroke-linecap="round" stroke-linejoin="round"/><circle cx="18" cy="16" r="3" stroke-linecap="round" stroke-linejoin="round"/></svg>`}
             </div>
             <div class="min-w-0 flex-1">
-              <div class="truncate">${escapeHTML(t.title) || '<span class="text-neutral-500">untitled</span>'}</div>
-              <div class="text-xs text-neutral-500 truncate">${escapeHTML(t.artist || '')}</div>
+              <div class="overflow-x-auto whitespace-nowrap">${escapeHTML(t.title) || '<span class="text-neutral-500">untitled</span>'}</div>
+              <div class="text-xs text-neutral-500 overflow-x-auto whitespace-nowrap">${escapeHTML(t.artist || '')}</div>
             </div>
           </li>`).join('');
       }
