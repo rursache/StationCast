@@ -1,4 +1,7 @@
-html, body { height: 100%; }
+/* Scrollable rows where the bar would be visual noise. The element still
+   scrolls horizontally via wheel, drag, or touch, just without a visible bar */
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
 
 input[type="range"] {
   height: 4px;
@@ -26,10 +29,6 @@ input[type="range"]::-moz-range-thumb {
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-thumb { background: #2a2a2a; border-radius: 4px; }
 ::-webkit-scrollbar-thumb:hover { background: #3a3a3a; }
-
-details > summary { list-style: none; }
-details > summary::-webkit-details-marker { display: none; }
-details[open] > summary svg.transition-transform { transform: rotate(180deg); }
 
 /* Style native selects */
 select {

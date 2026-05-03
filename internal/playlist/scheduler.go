@@ -37,7 +37,6 @@ type Scheduler struct {
 	currentStartedAt int64 // unix seconds when MarkPlaying recorded the current track
 	manual           []int64
 	recent           []int64
-	skipNext         bool
 
 	// Deck shuffle state. The deck is a freshly-shuffled list of track ids
 	// drawn one at a time. When deckPos catches the tail, the deck is
@@ -175,14 +174,6 @@ func (s *Scheduler) Dequeue(idx int) error {
 	return s.replaceQueue(snapshot)
 }
 
-func (s *Scheduler) Reorder(ids []int64) error {
-	s.mu.Lock()
-	s.manual = append([]int64(nil), ids...)
-	snapshot := append([]int64(nil), s.manual...)
-	s.mu.Unlock()
-	return s.replaceQueue(snapshot)
-}
-
 func (s *Scheduler) replaceQueue(ids []int64) error {
 	tx, err := s.db.Begin()
 	if err != nil {
@@ -198,22 +189,6 @@ func (s *Scheduler) replaceQueue(ids []int64) error {
 		}
 	}
 	return tx.Commit()
-}
-
-func (s *Scheduler) Skip() {
-	s.mu.Lock()
-	s.skipNext = true
-	s.mu.Unlock()
-}
-
-func (s *Scheduler) ShouldSkip() bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.skipNext {
-		s.skipNext = false
-		return true
-	}
-	return false
 }
 
 // Pick chooses the next track per mode, respecting manual queue priority.

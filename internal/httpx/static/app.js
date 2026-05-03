@@ -72,31 +72,9 @@
   player.addEventListener('pause', () => setPlayState(false));
   player.addEventListener('ended', () => setPlayState(false));
 
-  // Stall recovery. The browser's <audio> can silently deadlock if the
-  // upstream connection is dropped or the buffer underruns past its retry
-  // threshold. Watch currentTime advancement while playing - if it freezes
-  // for several seconds, force a reconnect by reassigning src
-  let lastT = 0;
-  let stuckSince = 0;
-  function recover() {
-    try {
-      setSource();
-      player.load();
-      player.play().catch(() => {});
-    } catch {}
-  }
-  setInterval(() => {
-    if (player.paused) { stuckSince = 0; lastT = player.currentTime; return; }
-    if (player.currentTime !== lastT) {
-      lastT = player.currentTime;
-      stuckSince = 0;
-      return;
-    }
-    if (stuckSince === 0) stuckSince = Date.now();
-    else if (Date.now() - stuckSince > 6000) { stuckSince = 0; recover(); }
-  }, 1000);
-  player.addEventListener('error', () => { if (!player.paused) recover(); });
-  player.addEventListener('stalled', () => { stuckSince = stuckSince || Date.now(); });
+  attachAudioWatchdog(player, () => {
+    try { setSource(); player.load(); player.play().catch(() => {}); } catch {}
+  });
 
   let lastArtURL = '';
   function applyNowPlaying(np) {
@@ -157,63 +135,10 @@
   }
 
   fetch('/now-playing').then(r => r.json()).then(applyNowPlaying).catch(() => {});
+  connectSSE('/now-playing/sse', applyNowPlaying);
 
-  let es;
-  function connectSSE() {
-    es = new EventSource('/now-playing/sse');
-    es.onmessage = (e) => { try { applyNowPlaying(JSON.parse(e.data)); } catch {} };
-    es.onerror = () => { es.close(); setTimeout(connectSSE, 3000); };
-  }
-  connectSSE();
-
-  // Copy-to-clipboard for stream URLs. The button row shows a small clipboard
-  // icon at rest; on success we swap it for a check mark for ~1.2s
-  const checkSVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="w-4 h-4"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>`;
-  document.querySelectorAll('button.copy').forEach(b => {
-    b.addEventListener('click', async () => {
-      try {
-        await navigator.clipboard.writeText(b.dataset.copy);
-        const icon = b.querySelector('.copy-icon');
-        if (!icon || icon.dataset.busy) return;
-        const orig = icon.innerHTML;
-        icon.dataset.busy = '1';
-        icon.innerHTML = checkSVG;
-        icon.classList.add('text-emerald-400');
-        setTimeout(() => {
-          icon.innerHTML = orig;
-          icon.classList.remove('text-emerald-400');
-          delete icon.dataset.busy;
-        }, 1200);
-      } catch {}
-    });
-  });
-
-  // Modal open/close logic. Both modals share the same skeleton: a toggle of
-  // `hidden` plus `flex` on the outer wrapper, and any descendant matching
-  // .modal-close or the .modal-backdrop closes the modal
-  function escapeHTML(s) { return (s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
-  function openModal(el) {
-    if (!el) return;
-    el.classList.remove('hidden');
-    el.classList.add('flex');
-    el.setAttribute('aria-hidden', 'false');
-  }
-  function closeModal(el) {
-    if (!el) return;
-    el.classList.add('hidden');
-    el.classList.remove('flex');
-    el.setAttribute('aria-hidden', 'true');
-  }
-  document.querySelectorAll('[id^="modal-"]').forEach(m => {
-    m.querySelectorAll('.modal-close, .modal-backdrop').forEach(el => {
-      el.addEventListener('click', () => closeModal(m));
-    });
-  });
-  document.addEventListener('keydown', e => {
-    if (e.key === 'Escape') {
-      document.querySelectorAll('[id^="modal-"]').forEach(closeModal);
-    }
-  });
+  bindCopyButtons();
+  bindModalDismiss();
 
   document.getElementById('open-streams')?.addEventListener('click', () => {
     openModal(document.getElementById('modal-streams'));
@@ -241,8 +166,8 @@
                 : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="w-4 h-4 text-neutral-600"><path stroke-linecap="round" stroke-linejoin="round" d="M9 19V5l12-2v14"/><circle cx="6" cy="19" r="3" stroke-linecap="round" stroke-linejoin="round"/><circle cx="18" cy="16" r="3" stroke-linecap="round" stroke-linejoin="round"/></svg>`}
             </div>
             <div class="min-w-0 flex-1">
-              <div class="overflow-x-auto whitespace-nowrap">${escapeHTML(t.title) || '<span class="text-neutral-500">untitled</span>'}</div>
-              <div class="text-xs text-neutral-500 overflow-x-auto whitespace-nowrap">${escapeHTML(t.artist || '')}</div>
+              <div class="overflow-x-auto whitespace-nowrap no-scrollbar">${escapeHTML(t.title) || '<span class="text-neutral-500">untitled</span>'}</div>
+              <div class="text-xs text-neutral-500 overflow-x-auto whitespace-nowrap no-scrollbar">${escapeHTML(t.artist || '')}</div>
             </div>
           </li>`).join('');
       }

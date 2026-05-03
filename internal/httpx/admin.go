@@ -237,7 +237,7 @@ func (s *Server) handleRename(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	http.Redirect(w, r, "/admin/", http.StatusSeeOther)
+	respondAdminPostOK(w, r)
 }
 
 func (s *Server) handleDelete(w http.ResponseWriter, r *http.Request) {
@@ -254,7 +254,7 @@ func (s *Server) handleDelete(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	http.Redirect(w, r, "/admin/", http.StatusSeeOther)
+	respondAdminPostOK(w, r)
 }
 
 func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {

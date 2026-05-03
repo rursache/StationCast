@@ -8,21 +8,21 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="/static/app.css">
 </head>
-<body class="h-screen overflow-hidden bg-gradient-to-b from-neutral-950 via-neutral-950 to-neutral-900">
+<body class="h-screen overflow-hidden bg-neutral-950">
 <div class="h-full max-w-7xl mx-auto px-4 py-6 flex flex-col gap-6">
 
   <header class="flex items-center justify-between flex-shrink-0">
     <div class="flex items-center gap-3">
-      <img src="/static/icon.svg" alt="" class="w-9 h-9 rounded-lg shadow-lg shadow-red-900/40">
+      <img src="/static/icon.svg" alt="" class="w-9 h-9 rounded-lg shadow-lg shadow-rose-900/40 ring-1 ring-white/5">
       <div>
-        <h1 class="text-lg font-semibold leading-tight">StationCast Admin Dashboard</h1>
+        <h1 class="text-lg font-semibold leading-tight">StationCast Admin</h1>
         <p class="text-xs text-neutral-500">{{.StationName}}</p>
       </div>
     </div>
     <div class="flex items-center gap-2">
-      <a href="/" class="text-xs text-neutral-400 hover:text-white border border-neutral-800 hover:border-neutral-700 rounded-lg px-3 py-1.5 transition">Public page →</a>
+      <a href="/" class="text-xs text-neutral-400 hover:text-white border border-neutral-800 hover:border-neutral-700 rounded-xl px-3 py-1.5 transition">Public page →</a>
       <form method="post" action="/admin/logout">
-        <button class="text-xs text-neutral-400 hover:text-white border border-neutral-800 hover:border-neutral-700 rounded-lg px-3 py-1.5 transition">Sign out</button>
+        <button class="text-xs text-neutral-400 hover:text-white border border-neutral-800 hover:border-neutral-700 rounded-xl px-3 py-1.5 transition">Sign out</button>
       </form>
     </div>
   </header>
@@ -30,7 +30,7 @@
   <!-- Now playing hero -->
   <section class="bg-neutral-900/60 backdrop-blur border border-neutral-800 rounded-2xl p-4 flex-shrink-0">
     <div class="flex flex-col md:flex-row gap-4">
-      <div id="np-art" class="w-20 h-20 md:w-24 md:h-24 rounded-xl overflow-hidden bg-neutral-800 flex-shrink-0 flex items-center justify-center">
+      <div id="np-art" class="w-20 h-20 md:w-24 md:h-24 rounded-2xl overflow-hidden bg-neutral-800 flex-shrink-0 flex items-center justify-center shadow-lg shadow-black/60 ring-1 ring-white/5">
         {{if and .Current .Current.HasArt}}
           <img src="/art/{{.Current.ID}}" alt="" class="w-full h-full object-cover">
         {{else}}
@@ -38,46 +38,46 @@
         {{end}}
       </div>
       <div class="flex-1 min-w-0">
-        <div class="flex items-center gap-2 mb-1 text-[11px] uppercase tracking-widest">
+        <div class="flex items-center gap-2 mb-2 text-[11px] uppercase tracking-widest">
           <span class="relative flex h-2 w-2">
-            <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-500 opacity-75"></span>
-            <span class="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+            <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-500 opacity-75"></span>
+            <span class="relative inline-flex rounded-full h-2 w-2 bg-rose-500"></span>
           </span>
-          <span class="text-red-400 font-medium">On air</span>
+          <span class="text-rose-400 font-medium">On air</span>
           <span class="text-neutral-700">·</span>
-          <span class="text-neutral-600">Now playing</span>
+          <span class="text-neutral-500">Now playing</span>
           <span id="np-progress-sep" class="text-neutral-700 hidden">·</span>
-          <span id="np-progress" class="text-neutral-500 font-mono normal-case tracking-normal"></span>
+          <span id="np-progress" class="text-neutral-400 font-mono normal-case tracking-normal"></span>
         </div>
-        <h2 id="np-title" class="text-lg md:text-xl font-semibold truncate">
+        <h2 id="np-title" class="text-xl md:text-2xl font-semibold truncate">
           {{if .Current}}{{.Current.Title}}{{else}}Idle{{end}}
         </h2>
-        <p id="np-artist" class="text-sm text-neutral-400 truncate">
+        <p id="np-artist" class="text-sm text-neutral-300 truncate mt-0.5">
           {{if .Current}}{{.Current.Artist}}{{if .Current.Album}} · {{.Current.Album}}{{end}}{{else}}Waiting for tracks{{end}}
         </p>
-        <p id="np-next" class="text-xs text-neutral-500 mt-1 truncate">
-          Up next: {{if .Next}}{{displayTitle .Next.Title .Next.Artist}}{{else}}—{{end}}
+        <p id="np-next" class="text-[11px] text-neutral-500 mt-3 uppercase tracking-wider line-clamp-2 leading-snug">
+          Up next · {{if .Next}}{{displayTitle .Next.Title .Next.Artist}}{{else}}—{{end}}
         </p>
       </div>
       <div class="flex flex-col items-end justify-between gap-2 min-w-0">
         <div class="flex items-center gap-2 flex-wrap justify-end">
-          <button id="local-play" type="button" aria-label="Listen" class="inline-flex items-center justify-center w-10 h-10 rounded-full bg-red-700 hover:bg-red-600 text-white shadow-lg shadow-red-900/40 transition" title="Listen to the broadcast in this browser">
+          <button id="local-play" type="button" aria-label="Listen" class="inline-flex items-center justify-center w-10 h-10 rounded-full bg-rose-700 hover:bg-rose-600 text-white shadow-lg shadow-rose-900/40 transition" title="Listen to the broadcast in this browser">
             <svg id="local-play-icon" viewBox="0 0 24 24" fill="currentColor" class="w-4 h-4 ml-0.5"><path d="M8 5v14l11-7z"/></svg>
             <svg id="local-pause-icon" viewBox="0 0 24 24" fill="currentColor" class="w-4 h-4 hidden"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg>
           </button>
-          <div id="local-vol-wrap" class="hidden items-center gap-2 bg-neutral-800/60 border border-neutral-700 rounded-lg px-3 py-2">
+          <div id="local-vol-wrap" class="hidden items-center gap-2 bg-neutral-800/60 border border-neutral-700 rounded-xl px-3 py-2">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-3.5 h-3.5 text-neutral-400"><path stroke-linecap="round" stroke-linejoin="round" d="M5 9v6h4l5 5V4L9 9H5z"/></svg>
             <input id="local-vol" type="range" min="0" max="100" value="100" class="w-24">
           </div>
           <form id="skip-form" method="post" action="/admin/skip">
-            <button class="inline-flex items-center gap-2 bg-white text-neutral-900 hover:bg-neutral-200 px-4 py-2 rounded-lg font-medium text-sm transition">
+            <button class="inline-flex items-center gap-2 border border-rose-800/80 text-rose-300 hover:bg-rose-900/30 hover:text-rose-200 px-4 py-2 rounded-xl font-medium text-sm transition">
               <svg viewBox="0 0 24 24" fill="currentColor" class="w-4 h-4"><path d="M5 4l10 8-10 8V4zm12 0h2v16h-2V4z"/></svg>
               Skip
             </button>
           </form>
         </div>
-        <div class="flex items-center gap-2 text-sm text-neutral-400">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-4 h-4"><path stroke-linecap="round" stroke-linejoin="round" d="M12 14a4 4 0 100-8 4 4 0 000 8z"/><path stroke-linecap="round" stroke-linejoin="round" d="M5 21a7 7 0 0114 0H5z"/></svg>
+        <div class="flex items-center gap-1.5 text-xs text-neutral-400 bg-neutral-800/40 border border-neutral-800 rounded-full px-2.5 py-1">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-3.5 h-3.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 14a4 4 0 100-8 4 4 0 000 8z"/><path stroke-linecap="round" stroke-linejoin="round" d="M5 21a7 7 0 0114 0H5z"/></svg>
           <span><strong id="np-listeners" class="text-white">{{.Listeners}}</strong> listening</span>
         </div>
       </div>
@@ -90,11 +90,11 @@
 
       <section id="queue-history-section" class="bg-neutral-900/60 backdrop-blur border border-neutral-800 rounded-2xl p-5 flex-1 min-h-0 flex flex-col">
         <div class="flex items-center justify-between mb-3 flex-shrink-0 gap-2">
-          <div class="flex items-center gap-1 bg-neutral-950/60 border border-neutral-800 rounded-lg p-0.5">
-            <button id="qh-tab-queue" type="button" data-active="true" class="text-sm font-medium px-3 py-1 rounded-md transition data-[active=true]:bg-neutral-800 data-[active=true]:text-white text-neutral-400 hover:text-white">Queue</button>
-            <button id="qh-tab-history" type="button" data-active="false" class="text-sm font-medium px-3 py-1 rounded-md transition data-[active=true]:bg-neutral-800 data-[active=true]:text-white text-neutral-400 hover:text-white">History</button>
+          <div class="flex items-center gap-1 bg-neutral-950/60 border border-neutral-800 rounded-xl p-0.5">
+            <button id="qh-tab-queue" type="button" data-active="true" class="text-sm font-medium px-3 py-1 rounded-lg transition data-[active=true]:bg-neutral-800 data-[active=true]:text-white data-[active=true]:shadow-sm text-neutral-400 hover:text-white">Queue</button>
+            <button id="qh-tab-history" type="button" data-active="false" class="text-sm font-medium px-3 py-1 rounded-lg transition data-[active=true]:bg-neutral-800 data-[active=true]:text-white data-[active=true]:shadow-sm text-neutral-400 hover:text-white">History</button>
           </div>
-          <span id="qh-count" class="text-xs text-neutral-500">{{len .Queue}} item{{if ne (len .Queue) 1}}s{{end}}</span>
+          <span id="qh-count" class="text-[11px] text-neutral-400 bg-neutral-800/50 rounded-full px-2 py-0.5">{{len .Queue}} item{{if ne (len .Queue) 1}}s{{end}}</span>
         </div>
 
         <div id="qh-pane-queue" class="flex-1 min-h-0 overflow-y-auto -mr-2 pr-2">
@@ -102,10 +102,10 @@
             {{range $i, $t := .Queue}}
             <li class="group flex items-center gap-2 text-sm bg-neutral-950/40 hover:bg-neutral-800/40 rounded-lg px-3 py-2" data-idx="{{$i}}">
               <span class="text-neutral-600 text-xs w-5 text-right flex-shrink-0">{{add $i 1}}</span>
-              <div class="flex-1 min-w-0 overflow-x-auto whitespace-nowrap">{{displayTitle $t.Title $t.Artist}}</div>
+              <div class="flex-1 min-w-0 overflow-x-auto whitespace-nowrap no-scrollbar">{{displayTitle $t.Title $t.Artist}}</div>
               <form method="post" action="/admin/queue/remove" class="flex-shrink-0">
                 <input type="hidden" name="idx" value="{{$i}}">
-                <button class="opacity-0 group-hover:opacity-100 text-neutral-500 hover:text-red-400 text-xs transition" title="Remove">
+                <button class="opacity-0 group-hover:opacity-100 text-neutral-500 hover:text-rose-400 text-xs transition" title="Remove">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-4 h-4"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
                 </button>
               </form>
@@ -120,7 +120,7 @@
             {{range $i, $t := .History}}
             <li class="flex items-center gap-2 text-sm bg-neutral-950/40 rounded-lg px-3 py-2">
               <span class="text-neutral-600 text-xs w-5 text-right flex-shrink-0">{{add $i 1}}</span>
-              <div class="flex-1 min-w-0 overflow-x-auto whitespace-nowrap">{{displayTitle $t.Title $t.Artist}}</div>
+              <div class="flex-1 min-w-0 overflow-x-auto whitespace-nowrap no-scrollbar">{{displayTitle $t.Title $t.Artist}}</div>
             </li>
             {{end}}
           </ol>
@@ -129,17 +129,17 @@
       </section>
 
       <section class="bg-neutral-900/60 backdrop-blur border border-neutral-800 rounded-2xl p-5 flex-shrink-0">
-        <h3 class="font-semibold mb-3">Upload</h3>
+        <h3 class="text-base font-semibold mb-3">Upload</h3>
         <form method="post" action="/admin/files/upload" enctype="multipart/form-data" class="space-y-3" id="upload-form">
           <label class="block">
             <input id="file-pick" type="file" name="file" required accept=".mp3,.wav,.flac,.ogg,.oga,.m4a,.aac" class="hidden">
-            <div id="file-drop" class="cursor-pointer border-2 border-dashed border-neutral-700 hover:border-red-600 rounded-xl p-4 text-center transition">
+            <div id="file-drop" class="cursor-pointer border-2 border-dashed border-neutral-700 hover:border-rose-600 rounded-xl p-4 text-center transition">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="w-7 h-7 mx-auto mb-1 text-neutral-500"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5-5 5 5M12 5v12"/></svg>
               <p class="text-sm text-neutral-400" id="file-label">Click or drop an audio file</p>
               <p class="text-xs text-neutral-600 mt-0.5">mp3, wav, flac, ogg, m4a, aac</p>
             </div>
           </label>
-          <button type="submit" class="w-full bg-red-700 hover:bg-red-600 text-white px-3 py-2 rounded-lg text-sm font-medium transition shadow-lg shadow-red-900/30">Upload</button>
+          <button type="submit" class="w-full border border-neutral-700 hover:border-rose-700 hover:bg-rose-950/30 text-neutral-300 hover:text-white px-3 py-2 rounded-xl text-sm font-medium transition">Upload</button>
         </form>
         <p class="text-center mt-3 pt-3 border-t border-neutral-800 text-xs text-neutral-600">
           {{if and .Version (ne .Version "dev")}}
@@ -155,73 +155,64 @@
     <!-- Right column: Library -->
     <section id="library-section" class="lg:col-span-2 bg-neutral-900/60 backdrop-blur border border-neutral-800 rounded-2xl p-5 flex flex-col min-h-0">
       <div class="flex items-center justify-between gap-3 mb-3">
-        <h3 class="font-semibold">Library <span id="lib-count" class="text-neutral-500 font-normal">({{len .Tracks}})</span></h3>
+        <h3 class="text-base font-semibold">Library <span id="lib-count" class="text-[11px] text-neutral-400 bg-neutral-800/50 rounded-full px-2 py-0.5 ml-1 align-middle">{{len .Tracks}}</span></h3>
         <div class="flex items-center gap-2">
-          <button id="lib-refresh" type="button" title="Refresh library" class="text-neutral-400 hover:text-white border border-neutral-800 hover:border-neutral-700 rounded-lg px-2 py-1.5 text-xs transition">
+          <button id="lib-refresh" type="button" title="Refresh library" class="text-neutral-400 hover:text-white border border-neutral-800 hover:border-neutral-700 rounded-xl w-8 h-8 flex items-center justify-center transition">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-3.5 h-3.5"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v6h6M20 20v-6h-6M5 19a9 9 0 0014.36-3.36M19 5a9 9 0 00-14.36 3.36"/></svg>
           </button>
-          <button id="lib-toggle-view" type="button" title="Show filenames" aria-pressed="false" class="text-neutral-400 hover:text-white border border-neutral-800 hover:border-neutral-700 rounded-lg px-2 py-1.5 text-xs transition">
+          <button id="lib-toggle-view" type="button" title="Show filenames" aria-pressed="false" class="text-neutral-400 hover:text-white border border-neutral-800 hover:border-neutral-700 rounded-xl w-8 h-8 flex items-center justify-center transition">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-3.5 h-3.5"><path stroke-linecap="round" stroke-linejoin="round" d="M14 3H6a2 2 0 00-2 2v14a2 2 0 002 2h12a2 2 0 002-2V9l-6-6z"/><path stroke-linecap="round" stroke-linejoin="round" d="M14 3v6h6"/></svg>
           </button>
           <form id="mode-form" method="post" action="/admin/mode">
-            <select id="mode-select" name="mode" data-current="{{.Mode}}" class="bg-neutral-950 border border-neutral-800 focus:border-red-600 outline-none rounded-lg px-3 py-1.5 text-sm">
+            <select id="mode-select" name="mode" data-current="{{.Mode}}" class="bg-neutral-950 border border-neutral-800 focus:border-rose-600 outline-none rounded-xl px-3 py-1.5 text-sm">
               <option value="shuffle"    {{if eq .Mode "shuffle"}}selected{{end}}>Shuffle</option>
               <option value="sequential" {{if eq .Mode "sequential"}}selected{{end}}>Sequential</option>
               <option value="loop"       {{if eq .Mode "loop"}}selected{{end}}>Loop</option>
             </select>
           </form>
-          <input id="lib-search" type="search" placeholder="Filter…" class="bg-neutral-950 border border-neutral-800 focus:border-red-600 outline-none rounded-lg px-3 py-1.5 text-sm w-48">
+          <input id="lib-search" type="search" placeholder="Filter…" class="bg-neutral-950 border border-neutral-800 focus:border-rose-600 outline-none rounded-xl px-3 py-1.5 text-sm w-48">
         </div>
       </div>
-      <div class="flex-1 overflow-y-auto overflow-x-hidden -mx-2">
-        <table class="w-full table-fixed text-sm" id="lib-table">
-          <thead class="sticky top-0 bg-neutral-900/95 backdrop-blur text-left text-neutral-500 text-[11px] uppercase tracking-wider">
-            <tr>
-              <th class="font-medium py-2 px-2">Track</th>
-              <th class="font-medium py-2 px-2 text-right w-[210px]">Actions</th>
-            </tr>
-          </thead>
-          <tbody id="lib-tbody">
-            {{range .Tracks}}
-            <tr class="lib-row border-t border-neutral-800/60 hover:bg-neutral-800/30 transition">
-              <td class="py-2 px-2 align-middle">
-                <div class="flex items-center gap-2 min-w-0">
-                  <div class="w-8 h-8 rounded bg-neutral-800 flex-shrink-0 flex items-center justify-center overflow-hidden">
-                    {{if .HasArt}}<img src="/art/{{.ID}}" class="w-full h-full object-cover">{{else}}<span class="text-neutral-600">♪</span>{{end}}
-                  </div>
-                  <div class="min-w-0 flex-1">
-                    <div class="lib-meta">
-                      <div class="truncate">{{if .Title}}{{.Title}}{{else}}<span class="text-neutral-500">untitled</span>{{end}}</div>
-                      <div class="text-xs text-neutral-500 truncate">{{.Artist}}</div>
-                      {{if .Album}}<div class="text-xs text-neutral-600 truncate">{{.Album}}</div>{{end}}
-                    </div>
-                    <div class="lib-filename hidden truncate font-mono text-xs text-neutral-300">{{.Filename}}</div>
-                  </div>
-                </div>
-              </td>
-              <td class="py-2 px-2 align-middle text-right whitespace-nowrap">
-                <form method="post" action="/admin/queue" class="inline">
-                  <input type="hidden" name="id" value="{{.ID}}">
-                  <button class="text-neutral-300 hover:text-red-400 px-2 py-1 text-xs rounded hover:bg-neutral-800/60 transition" title="Add to queue">＋ queue</button>
-                </form>
-                <form method="post" action="/admin/files/rename" class="inline" data-rename data-filename="{{.Filename}}">
-                  <input type="hidden" name="id" value="{{.ID}}">
-                  <input type="hidden" name="name" value="">
-                  <button class="text-neutral-300 hover:text-amber-400 px-2 py-1 text-xs rounded hover:bg-neutral-800/60 transition" title="Rename file">rename</button>
-                </form>
-                <form method="post" action="/admin/files/delete" class="inline" data-confirm="Delete this file from disk?">
-                  <input type="hidden" name="id" value="{{.ID}}">
-                  <button class="text-red-400 hover:text-red-300 px-2 py-1 text-xs rounded hover:bg-red-500/10 transition" title="Delete">delete</button>
-                </form>
-              </td>
-            </tr>
-            {{else}}
-            <tr id="lib-empty"><td colspan="2" class="py-12 text-center text-neutral-500">
-              No tracks. Upload one or drop files into the music directory.
-            </td></tr>
-            {{end}}
-          </tbody>
-        </table>
+      <div id="lib-list-wrap" class="flex-1 overflow-y-auto -mr-2 pr-2">
+        <ol id="lib-list" class="space-y-1.5">
+          {{range .Tracks}}
+          <li class="lib-row group flex items-center gap-3 bg-neutral-950/40 hover:bg-neutral-800/30 rounded-lg px-3 py-2 transition">
+            <div class="w-9 h-9 rounded-lg bg-neutral-800 flex-shrink-0 flex items-center justify-center overflow-hidden">
+              {{if .HasArt}}<img src="/art/{{.ID}}" class="w-full h-full object-cover">{{else}}<span class="text-neutral-600">♪</span>{{end}}
+            </div>
+            <div class="lib-meta min-w-0 flex-1">
+              <div class="overflow-x-auto whitespace-nowrap no-scrollbar text-sm">{{if .Title}}{{.Title}}{{else}}<span class="text-neutral-500">untitled</span>{{end}}</div>
+              <div class="text-xs text-neutral-500 overflow-x-auto whitespace-nowrap no-scrollbar">{{.Artist}}{{if .Album}} · {{.Album}}{{end}}</div>
+            </div>
+            <div class="lib-filename hidden min-w-0 flex-1 overflow-x-auto whitespace-nowrap no-scrollbar font-mono text-xs text-neutral-300">{{.Filename}}</div>
+            <div class="flex items-center gap-0.5 flex-shrink-0">
+              <form method="post" action="/admin/queue">
+                <input type="hidden" name="id" value="{{.ID}}">
+                <button class="p-2 rounded-lg text-neutral-400 hover:text-white hover:bg-neutral-700/50 transition" title="Add to queue" aria-label="Add to queue">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-4 h-4"><path stroke-linecap="round" stroke-linejoin="round" d="M12 5v14M5 12h14"/></svg>
+                </button>
+              </form>
+              <form method="post" action="/admin/files/rename" data-rename data-filename="{{.Filename}}">
+                <input type="hidden" name="id" value="{{.ID}}">
+                <input type="hidden" name="name" value="">
+                <button class="p-2 rounded-lg text-neutral-500 hover:text-amber-400 hover:bg-neutral-700/50 transition" title="Rename file" aria-label="Rename">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-4 h-4"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5"/><path stroke-linecap="round" stroke-linejoin="round" d="M18.5 2.5a2.121 2.121 0 113 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                </button>
+              </form>
+              <form method="post" action="/admin/files/delete" data-confirm="Delete this file from disk?">
+                <input type="hidden" name="id" value="{{.ID}}">
+                <button class="p-2 rounded-lg text-neutral-500 hover:text-rose-400 hover:bg-rose-500/10 transition" title="Delete" aria-label="Delete">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-4 h-4"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3"/></svg>
+                </button>
+              </form>
+            </div>
+          </li>
+          {{else}}
+          <li id="lib-empty" class="py-12 text-center text-neutral-500">
+            No tracks. Upload one or drop files into the music directory.
+          </li>
+          {{end}}
+        </ol>
       </div>
     </section>
   </div>
@@ -229,9 +220,10 @@
 </div>
 
 <audio id="local-audio" preload="none" crossorigin="anonymous"></audio>
+<script src="/static/utils.js"></script>
 <script>
   // Local in-admin monitor: play/pause + volume, controls only this browser's
-  // audio element, never the server stream.
+  // audio element, never the server stream
   (function() {
     const audio = document.getElementById('local-audio');
     const btn = document.getElementById('local-play');
@@ -284,27 +276,9 @@
     audio.addEventListener('play', () => setPlaying(true));
     audio.addEventListener('pause', () => setPlaying(false));
 
-    // Stall recovery. The browser's <audio> can silently deadlock if the
-    // upstream connection is dropped or the buffer underruns past its retry
-    // threshold. Watch currentTime advancement while playing - if it freezes
-    // for several seconds, force a reconnect by reassigning src
-    let lastT = 0;
-    let stuckSince = 0;
-    function recover() {
+    attachAudioWatchdog(audio, () => {
       try { setSrc(); audio.load(); audio.play().catch(() => {}); } catch {}
-    }
-    setInterval(() => {
-      if (audio.paused) { stuckSince = 0; lastT = audio.currentTime; return; }
-      if (audio.currentTime !== lastT) {
-        lastT = audio.currentTime;
-        stuckSince = 0;
-        return;
-      }
-      if (stuckSince === 0) stuckSince = Date.now();
-      else if (Date.now() - stuckSince > 6000) { stuckSince = 0; recover(); }
-    }, 1000);
-    audio.addEventListener('error', () => { if (!audio.paused) recover(); });
-    audio.addEventListener('stalled', () => { stuckSince = stuckSince || Date.now(); });
+    });
   })();
 </script>
 <script>
@@ -314,8 +288,8 @@
   const label = document.getElementById('file-label');
   if (drop && pick) {
     pick.addEventListener('change', () => { if (pick.files[0]) label.textContent = pick.files[0].name; });
-    ['dragover','dragenter'].forEach(e => drop.addEventListener(e, ev => { ev.preventDefault(); drop.classList.add('border-red-600','bg-red-500/10'); }));
-    ['dragleave','drop'].forEach(e => drop.addEventListener(e, ev => { ev.preventDefault(); drop.classList.remove('border-red-600','bg-red-500/10'); }));
+    ['dragover','dragenter'].forEach(e => drop.addEventListener(e, ev => { ev.preventDefault(); drop.classList.add('border-rose-600','bg-rose-500/10'); }));
+    ['dragleave','drop'].forEach(e => drop.addEventListener(e, ev => { ev.preventDefault(); drop.classList.remove('border-rose-600','bg-rose-500/10'); }));
     drop.addEventListener('drop', ev => {
       if (ev.dataTransfer.files[0]) { pick.files = ev.dataTransfer.files; label.textContent = pick.files[0].name; }
     });
@@ -325,8 +299,8 @@
   const search = document.getElementById('lib-search');
   function applyFilter() {
     const q = (search?.value || '').toLowerCase();
-    document.querySelectorAll('#lib-table tbody tr.lib-row').forEach(tr => {
-      tr.style.display = tr.textContent.toLowerCase().includes(q) ? '' : 'none';
+    document.querySelectorAll('#lib-list .lib-row').forEach(row => {
+      row.style.display = row.textContent.toLowerCase().includes(q) ? '' : 'none';
     });
   }
   if (search) search.addEventListener('input', applyFilter);
@@ -348,10 +322,6 @@
   }
   bindRowActions();
 
-  // Live refresh: now-playing via SSE, queue / history on each SSE event,
-  // library on a 15s poll + on focus
-  function escapeHTML(s) { return (s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
-
   let lastNP = null;
 
   function applyNowPlaying(d) {
@@ -366,16 +336,14 @@
       if (d.album) s = (s ? s + ' · ' : '') + d.album;
       a.textContent = s || 'Waiting for tracks';
     }
-    if (n) n.textContent = 'Up next: ' + (d.next_title ? (d.next_artist ? d.next_artist + ' - ' : '') + d.next_title : '—');
+    if (n) n.textContent = 'Up next · ' + (d.next_title ? (d.next_artist ? d.next_artist + ' — ' : '') + d.next_title : '—');
     if (l) l.textContent = d.listeners || 0;
     const art = document.getElementById('np-art');
     if (art) {
-      const fallback = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="w-12 h-12 text-neutral-600"><path stroke-linecap="round" stroke-linejoin="round" d="M9 19V5l12-2v14"/><circle cx="6" cy="19" r="3" stroke-linecap="round" stroke-linejoin="round"/><circle cx="18" cy="16" r="3" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+      const fallback = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="w-10 h-10 text-neutral-600"><path stroke-linecap="round" stroke-linejoin="round" d="M9 19V5l12-2v14"/><circle cx="6" cy="19" r="3" stroke-linecap="round" stroke-linejoin="round"/><circle cx="18" cy="16" r="3" stroke-linecap="round" stroke-linejoin="round"/></svg>';
       if (d.has_art && d.art_url) {
         const img = art.querySelector('img');
-        if (img && img.getAttribute('src') === d.art_url) {
-          // already showing this art, leave it alone
-        } else {
+        if (!img || img.getAttribute('src') !== d.art_url) {
           art.innerHTML = `<img src="${escapeHTML(d.art_url)}" alt="" class="w-full h-full object-cover">`;
         }
       } else if (!art.querySelector('svg')) {
@@ -395,10 +363,8 @@
   // Approximate seconds between server-emit and listener-audible position.
   // Encoder buffer + network jitter buffer (~1-2s) + browser <audio> jitter
   // buffer (~1.5-3s) stack into a ~3-5s lag for typical Chrome listeners on
-  // a direct MP3 stream. Subtracting it makes the displayed elapsed line up
-  // with what the in-browser monitor actually plays. Listeners on clients
-  // with much bigger buffers (eg some hardware radios) will still see the
-  // label slightly ahead of their audio
+  // a direct MP3 stream. Subtracting it lines the displayed elapsed up with
+  // what the in-browser monitor actually plays
   const PROGRESS_OFFSET_SEC = 5;
 
   function updateProgress() {
@@ -444,10 +410,10 @@
     list.innerHTML = items.map((t, i) => `
       <li class="group flex items-center gap-2 text-sm bg-neutral-950/40 hover:bg-neutral-800/40 rounded-lg px-3 py-2" data-idx="${i}">
         <span class="text-neutral-600 text-xs w-5 text-right flex-shrink-0">${i + 1}</span>
-        <div class="flex-1 min-w-0 overflow-x-auto whitespace-nowrap">${escapeHTML(t.display || t.title || '')}</div>
+        <div class="flex-1 min-w-0 overflow-x-auto whitespace-nowrap no-scrollbar">${escapeHTML(t.display || t.title || '')}</div>
         <form method="post" action="/admin/queue/remove" class="flex-shrink-0">
           <input type="hidden" name="idx" value="${i}">
-          <button class="opacity-0 group-hover:opacity-100 text-neutral-500 hover:text-red-400 text-xs transition" title="Remove">
+          <button class="opacity-0 group-hover:opacity-100 text-neutral-500 hover:text-rose-400 text-xs transition" title="Remove">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-4 h-4"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
           </button>
         </form>
@@ -467,7 +433,7 @@
     list.innerHTML = items.map((t, i) => `
       <li class="flex items-center gap-2 text-sm bg-neutral-950/40 rounded-lg px-3 py-2">
         <span class="text-neutral-600 text-xs w-5 text-right flex-shrink-0">${i + 1}</span>
-        <div class="flex-1 min-w-0 overflow-x-auto whitespace-nowrap">${escapeHTML(t.display || t.title || '')}</div>
+        <div class="flex-1 min-w-0 overflow-x-auto whitespace-nowrap no-scrollbar">${escapeHTML(t.display || t.title || '')}</div>
       </li>`).join('');
   }
 
@@ -486,48 +452,47 @@
       const r = await fetch('/admin/library.json', { credentials: 'same-origin' });
       if (!r.ok) return;
       const tracks = await r.json();
-      const tbody = document.getElementById('lib-tbody');
+      const list = document.getElementById('lib-list');
       const count = document.getElementById('lib-count');
-      if (count) count.textContent = `(${tracks.length})`;
-      if (!tbody) return;
+      if (count) count.textContent = tracks.length;
+      if (!list) return;
       if (tracks.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="2" class="py-12 text-center text-neutral-500">No tracks. Upload one or drop files into the music directory.</td></tr>`;
+        list.innerHTML = `<li id="lib-empty" class="py-12 text-center text-neutral-500">No tracks. Upload one or drop files into the music directory.</li>`;
         return;
       }
-      const showFilenames = document.getElementById('lib-table')?.classList.contains('show-filenames');
-      tbody.innerHTML = tracks.map(t => `
-        <tr class="lib-row border-t border-neutral-800/60 hover:bg-neutral-800/30 transition">
-          <td class="py-2 px-2 align-middle">
-            <div class="flex items-center gap-2 min-w-0">
-              <div class="w-8 h-8 rounded bg-neutral-800 flex-shrink-0 flex items-center justify-center overflow-hidden">
-                ${t.has_art ? `<img src="/art/${t.id}" class="w-full h-full object-cover">` : `<span class="text-neutral-600">♪</span>`}
-              </div>
-              <div class="min-w-0 flex-1">
-                <div class="lib-meta${showFilenames ? ' hidden' : ''}">
-                  <div class="truncate">${escapeHTML(t.title) || '<span class="text-neutral-500">untitled</span>'}</div>
-                  <div class="text-xs text-neutral-500 truncate">${escapeHTML(t.artist)}</div>
-                  ${t.album ? `<div class="text-xs text-neutral-600 truncate">${escapeHTML(t.album)}</div>` : ''}
-                </div>
-                <div class="lib-filename${showFilenames ? '' : ' hidden'} truncate font-mono text-xs text-neutral-300">${escapeHTML(t.filename || '')}</div>
-              </div>
-            </div>
-          </td>
-          <td class="py-2 px-2 align-middle text-right whitespace-nowrap">
-            <form method="post" action="/admin/queue" class="inline">
+      const showFilenames = document.getElementById('lib-list-wrap')?.classList.contains('show-filenames');
+      list.innerHTML = tracks.map(t => `
+        <li class="lib-row group flex items-center gap-3 bg-neutral-950/40 hover:bg-neutral-800/30 rounded-lg px-3 py-2 transition">
+          <div class="w-9 h-9 rounded-lg bg-neutral-800 flex-shrink-0 flex items-center justify-center overflow-hidden">
+            ${t.has_art ? `<img src="/art/${t.id}" class="w-full h-full object-cover">` : `<span class="text-neutral-600">♪</span>`}
+          </div>
+          <div class="lib-meta${showFilenames ? ' hidden' : ''} min-w-0 flex-1">
+            <div class="overflow-x-auto whitespace-nowrap no-scrollbar text-sm">${escapeHTML(t.title) || '<span class="text-neutral-500">untitled</span>'}</div>
+            <div class="text-xs text-neutral-500 overflow-x-auto whitespace-nowrap no-scrollbar">${escapeHTML(t.artist)}${t.album ? ' · ' + escapeHTML(t.album) : ''}</div>
+          </div>
+          <div class="lib-filename${showFilenames ? '' : ' hidden'} min-w-0 flex-1 overflow-x-auto whitespace-nowrap no-scrollbar font-mono text-xs text-neutral-300">${escapeHTML(t.filename || '')}</div>
+          <div class="flex items-center gap-0.5 flex-shrink-0">
+            <form method="post" action="/admin/queue">
               <input type="hidden" name="id" value="${t.id}">
-              <button class="text-neutral-300 hover:text-red-400 px-2 py-1 text-xs rounded hover:bg-neutral-800/60 transition" title="Add to queue">＋ queue</button>
+              <button class="p-2 rounded-lg text-neutral-400 hover:text-white hover:bg-neutral-700/50 transition" title="Add to queue" aria-label="Add to queue">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-4 h-4"><path stroke-linecap="round" stroke-linejoin="round" d="M12 5v14M5 12h14"/></svg>
+              </button>
             </form>
-            <form method="post" action="/admin/files/rename" class="inline" data-rename data-filename="${escapeHTML(t.filename || '')}">
+            <form method="post" action="/admin/files/rename" data-rename data-filename="${escapeHTML(t.filename || '')}">
               <input type="hidden" name="id" value="${t.id}">
               <input type="hidden" name="name" value="">
-              <button class="text-neutral-300 hover:text-amber-400 px-2 py-1 text-xs rounded hover:bg-neutral-800/60 transition" title="Rename file">rename</button>
+              <button class="p-2 rounded-lg text-neutral-500 hover:text-amber-400 hover:bg-neutral-700/50 transition" title="Rename file" aria-label="Rename">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-4 h-4"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5"/><path stroke-linecap="round" stroke-linejoin="round" d="M18.5 2.5a2.121 2.121 0 113 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+              </button>
             </form>
-            <form method="post" action="/admin/files/delete" class="inline" data-confirm="Delete this file from disk?">
+            <form method="post" action="/admin/files/delete" data-confirm="Delete this file from disk?">
               <input type="hidden" name="id" value="${t.id}">
-              <button class="text-red-400 hover:text-red-300 px-2 py-1 text-xs rounded hover:bg-red-500/10 transition" title="Delete">delete</button>
+              <button class="p-2 rounded-lg text-neutral-500 hover:text-rose-400 hover:bg-rose-500/10 transition" title="Delete" aria-label="Delete">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-4 h-4"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3"/></svg>
+              </button>
             </form>
-          </td>
-        </tr>`).join('');
+          </div>
+        </li>`).join('');
       bindRowActions();
       applyFilter();
     } catch {}
@@ -565,14 +530,14 @@
   })();
 
   // Toggle metadata vs filename in the library rows
-  const libTable = document.getElementById('lib-table');
+  const libWrap = document.getElementById('lib-list-wrap');
   const libToggle = document.getElementById('lib-toggle-view');
-  if (libTable && libToggle) {
+  if (libWrap && libToggle) {
     libToggle.addEventListener('click', () => {
-      const next = !libTable.classList.contains('show-filenames');
-      libTable.classList.toggle('show-filenames', next);
-      libTable.querySelectorAll('.lib-meta').forEach(el => el.classList.toggle('hidden', next));
-      libTable.querySelectorAll('.lib-filename').forEach(el => el.classList.toggle('hidden', !next));
+      const next = !libWrap.classList.contains('show-filenames');
+      libWrap.classList.toggle('show-filenames', next);
+      libWrap.querySelectorAll('.lib-meta').forEach(el => el.classList.toggle('hidden', next));
+      libWrap.querySelectorAll('.lib-filename').forEach(el => el.classList.toggle('hidden', !next));
       libToggle.setAttribute('aria-pressed', String(next));
       libToggle.title = next ? 'Show metadata' : 'Show filenames';
     });
@@ -597,13 +562,19 @@
     tabH.addEventListener('click', () => show('history'));
   })();
 
-  // AJAX-submit any admin POST form that mutates playback or queue state so
-  // the page never reloads (which would interrupt the in-browser audio
-  // monitor). The server emits 204 No Content for JSON-aware clients
+  // AJAX-submit any admin POST form that mutates playback / queue / library
+  // state so the page never reloads (which would interrupt the in-browser
+  // audio monitor). The server emits 204 No Content for JSON-aware clients
   const ajaxAdminPaths = new Set([
     '/admin/skip',
     '/admin/queue',
     '/admin/queue/remove',
+    '/admin/files/rename',
+    '/admin/files/delete',
+  ]);
+  const libMutatingPaths = new Set([
+    '/admin/files/rename',
+    '/admin/files/delete',
   ]);
   document.addEventListener('submit', async e => {
     const f = e.target;
@@ -620,30 +591,13 @@
       });
     } catch {}
     refreshAdminState();
+    if (libMutatingPaths.has(u.pathname)) refreshLibrary();
   });
 
-  // Live now-playing via SSE. The same channel the public page uses, so
-  // header text + art update within ~1s of the actual track change. On each
-  // event also pull fresh queue / history so a queued track that just
-  // became the current one drops out of the queue immediately
-  function connectSSE() {
-    const es = new EventSource('/now-playing/sse');
-    es.onmessage = e => {
-      try {
-        const d = JSON.parse(e.data);
-        applyNowPlaying(d);
-        refreshAdminState();
-      } catch {}
-    };
-    es.onerror = () => {
-      es.close();
-      setTimeout(connectSSE, 3000);
-    };
-  }
   // Initial render uses fetch so we have data even before the first SSE tick
   fetch('/now-playing').then(r => r.json()).then(applyNowPlaying).catch(() => {});
   refreshAdminState();
-  connectSSE();
+  connectSSE('/now-playing/sse', d => { applyNowPlaying(d); refreshAdminState(); });
 
   document.addEventListener('visibilitychange', () => { if (!document.hidden) { refreshLibrary(); refreshAdminState(); } });
 
