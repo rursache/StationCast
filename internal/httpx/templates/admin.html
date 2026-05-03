@@ -30,7 +30,7 @@
   <!-- Now playing hero -->
   <section class="bg-neutral-900/60 backdrop-blur border border-neutral-800 rounded-2xl p-4 flex-shrink-0">
     <div class="flex flex-col md:flex-row gap-4">
-      <div id="np-art" class="w-20 h-20 md:w-24 md:h-24 rounded-2xl overflow-hidden bg-neutral-800 flex-shrink-0 flex items-center justify-center shadow-lg shadow-black/60 ring-1 ring-white/5">
+      <div id="np-art" class="w-20 h-20 md:w-28 md:h-28 rounded-2xl overflow-hidden bg-neutral-800 flex-shrink-0 flex items-center justify-center shadow-lg shadow-black/60 ring-1 ring-white/5">
         {{if and .Current .Current.HasArt}}
           <img src="/art/{{.Current.ID}}" alt="" class="w-full h-full object-cover">
         {{else}}
@@ -85,19 +85,17 @@
   </section>
 
   <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 flex-1 min-h-0">
-    <!-- Left column: Queue + Upload (with footer) -->
-    <div class="lg:col-span-1 flex flex-col gap-6 min-h-0">
-
-      <section id="queue-history-section" class="bg-neutral-900/60 backdrop-blur border border-neutral-800 rounded-2xl p-5 flex-1 min-h-0 flex flex-col">
-        <div class="flex items-center justify-between mb-3 flex-shrink-0 gap-2">
-          <div class="flex items-center gap-1 bg-neutral-950/60 border border-neutral-800 rounded-xl p-0.5">
-            <button id="qh-tab-queue" type="button" data-active="true" class="text-sm font-medium px-3 py-1 rounded-lg transition data-[active=true]:bg-neutral-800 data-[active=true]:text-white data-[active=true]:shadow-sm text-neutral-400 hover:text-white">Queue</button>
-            <button id="qh-tab-history" type="button" data-active="false" class="text-sm font-medium px-3 py-1 rounded-lg transition data-[active=true]:bg-neutral-800 data-[active=true]:text-white data-[active=true]:shadow-sm text-neutral-400 hover:text-white">History</button>
-          </div>
-          <span id="qh-count" class="text-[11px] text-neutral-400 bg-neutral-800/50 rounded-full px-2 py-0.5">{{len .Queue}} item{{if ne (len .Queue) 1}}s{{end}}</span>
+    <!-- Left column: Queue / History (full height, with version footer) -->
+    <section id="queue-history-section" class="lg:col-span-1 bg-neutral-900/60 backdrop-blur border border-neutral-800 rounded-2xl p-5 min-h-0 flex flex-col">
+      <div class="flex items-center justify-between mb-3 flex-shrink-0 gap-2">
+        <div class="flex items-center gap-1 bg-neutral-950/60 border border-neutral-800 rounded-xl p-0.5">
+          <button id="qh-tab-queue" type="button" data-active="true" class="text-sm font-medium px-3 py-1 rounded-lg transition data-[active=true]:bg-neutral-800 data-[active=true]:text-white data-[active=true]:shadow-sm text-neutral-400 hover:text-white">Queue</button>
+          <button id="qh-tab-history" type="button" data-active="false" class="text-sm font-medium px-3 py-1 rounded-lg transition data-[active=true]:bg-neutral-800 data-[active=true]:text-white data-[active=true]:shadow-sm text-neutral-400 hover:text-white">History</button>
         </div>
+        <span id="qh-count" class="text-[11px] text-neutral-400 bg-neutral-800/50 rounded-full px-2 py-0.5">{{len .Queue}} item{{if ne (len .Queue) 1}}s{{end}}</span>
+      </div>
 
-        <div id="qh-pane-queue" class="flex-1 min-h-0 overflow-y-auto -mr-2 pr-2">
+      <div id="qh-pane-queue" class="flex-1 min-h-0 overflow-y-auto -mr-2 pr-2">
           <ol id="qh-queue-list" class="space-y-1.5">
             {{range $i, $t := .Queue}}
             <li class="group flex items-center gap-2 text-sm bg-neutral-950/40 hover:bg-neutral-800/40 rounded-lg px-3 py-2" data-idx="{{$i}}">
@@ -115,48 +113,38 @@
           <p id="qh-queue-empty" class="text-sm text-neutral-500 italic{{if .Queue}} hidden{{end}}">Empty - shuffle picks tracks automatically</p>
         </div>
 
-        <div id="qh-pane-history" class="hidden flex-1 min-h-0 overflow-y-auto -mr-2 pr-2">
-          <ol id="qh-history-list" class="space-y-1.5">
-            {{range $i, $t := .History}}
-            <li class="flex items-center gap-2 text-sm bg-neutral-950/40 rounded-lg px-3 py-2">
-              <span class="text-neutral-600 text-xs w-5 text-right flex-shrink-0">{{add $i 1}}</span>
-              <div class="flex-1 min-w-0 overflow-x-auto whitespace-nowrap no-scrollbar">{{displayTitle $t.Title $t.Artist}}</div>
-            </li>
-            {{end}}
-          </ol>
-          <p id="qh-history-empty" class="text-sm text-neutral-500 italic{{if .History}} hidden{{end}}">No tracks have played yet</p>
-        </div>
-      </section>
-
-      <section class="bg-neutral-900/60 backdrop-blur border border-neutral-800 rounded-2xl p-5 flex-shrink-0">
-        <h3 class="text-base font-semibold mb-3">Upload</h3>
-        <form method="post" action="/admin/files/upload" enctype="multipart/form-data" class="space-y-3" id="upload-form">
-          <label class="block">
-            <input id="file-pick" type="file" name="file" required accept=".mp3,.wav,.flac,.ogg,.oga,.m4a,.aac" class="hidden">
-            <div id="file-drop" class="cursor-pointer border-2 border-dashed border-neutral-700 hover:border-rose-600 rounded-xl p-4 text-center transition">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="w-7 h-7 mx-auto mb-1 text-neutral-500"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5-5 5 5M12 5v12"/></svg>
-              <p class="text-sm text-neutral-400" id="file-label">Click or drop an audio file</p>
-              <p class="text-xs text-neutral-600 mt-0.5">mp3, wav, flac, ogg, m4a, aac</p>
-            </div>
-          </label>
-          <button type="submit" class="w-full border border-neutral-700 hover:border-rose-700 hover:bg-rose-950/30 text-neutral-300 hover:text-white px-3 py-2 rounded-xl text-sm font-medium transition">Upload</button>
-        </form>
-        <p class="text-center mt-3 pt-3 border-t border-neutral-800 text-xs text-neutral-600">
-          {{if and .Version (ne .Version "dev")}}
-            <a href="https://github.com/rursache/StationCast/releases/tag/{{.Version}}" class="hover:text-neutral-400">StationCast {{.Version}}</a>
-          {{else}}
-            <a href="https://github.com/rursache/StationCast" class="hover:text-neutral-400">StationCast{{if .Version}} {{.Version}}{{end}}</a>
+      <div id="qh-pane-history" class="hidden flex-1 min-h-0 overflow-y-auto -mr-2 pr-2">
+        <ol id="qh-history-list" class="space-y-1.5">
+          {{range $i, $t := .History}}
+          <li class="flex items-center gap-2 text-sm bg-neutral-950/40 rounded-lg px-3 py-2">
+            <span class="text-neutral-600 text-xs w-5 text-right flex-shrink-0">{{add $i 1}}</span>
+            <div class="flex-1 min-w-0 overflow-x-auto whitespace-nowrap no-scrollbar">{{displayTitle $t.Title $t.Artist}}</div>
+          </li>
           {{end}}
-        </p>
-      </section>
+        </ol>
+        <p id="qh-history-empty" class="text-sm text-neutral-500 italic{{if .History}} hidden{{end}}">No tracks have played yet</p>
+      </div>
 
-    </div>
+      <p class="text-center mt-3 pt-3 border-t border-neutral-800 text-xs text-neutral-600 flex-shrink-0">
+        {{if and .Version (ne .Version "dev")}}
+          <a href="https://github.com/rursache/StationCast/releases/tag/{{.Version}}" class="hover:text-neutral-400">StationCast {{.Version}}</a>
+        {{else}}
+          <a href="https://github.com/rursache/StationCast" class="hover:text-neutral-400">StationCast{{if .Version}} {{.Version}}{{end}}</a>
+        {{end}}
+      </p>
+    </section>
 
     <!-- Right column: Library -->
     <section id="library-section" class="lg:col-span-2 bg-neutral-900/60 backdrop-blur border border-neutral-800 rounded-2xl p-5 flex flex-col min-h-0">
       <div class="flex items-center justify-between gap-3 mb-3">
         <h3 class="text-base font-semibold">Library <span id="lib-count" class="text-[11px] text-neutral-400 bg-neutral-800/50 rounded-full px-2 py-0.5 ml-1 align-middle">{{len .Tracks}}</span></h3>
         <div class="flex items-center gap-2">
+          <button id="lib-upload" type="button" title="Upload an audio file" aria-label="Upload" class="text-rose-300 hover:text-white border border-rose-800/80 hover:bg-rose-900/30 rounded-xl w-8 h-8 flex items-center justify-center transition">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" class="w-3.5 h-3.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 5v14M5 12h14"/></svg>
+          </button>
+          <form id="upload-form" method="post" action="/admin/files/upload" enctype="multipart/form-data" class="hidden">
+            <input id="file-pick" type="file" name="file" accept=".mp3,.wav,.flac,.ogg,.oga,.m4a,.aac">
+          </form>
           <button id="lib-refresh" type="button" title="Refresh library" class="text-neutral-400 hover:text-white border border-neutral-800 hover:border-neutral-700 rounded-xl w-8 h-8 flex items-center justify-center transition">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-3.5 h-3.5"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v6h6M20 20v-6h-6M5 19a9 9 0 0014.36-3.36M19 5a9 9 0 00-14.36 3.36"/></svg>
           </button>
@@ -282,16 +270,28 @@
   })();
 </script>
 <script>
-  // File drop styling
-  const drop = document.getElementById('file-drop');
-  const pick = document.getElementById('file-pick');
-  const label = document.getElementById('file-label');
-  if (drop && pick) {
-    pick.addEventListener('change', () => { if (pick.files[0]) label.textContent = pick.files[0].name; });
-    ['dragover','dragenter'].forEach(e => drop.addEventListener(e, ev => { ev.preventDefault(); drop.classList.add('border-rose-600','bg-rose-500/10'); }));
-    ['dragleave','drop'].forEach(e => drop.addEventListener(e, ev => { ev.preventDefault(); drop.classList.remove('border-rose-600','bg-rose-500/10'); }));
-    drop.addEventListener('drop', ev => {
-      if (ev.dataTransfer.files[0]) { pick.files = ev.dataTransfer.files; label.textContent = pick.files[0].name; }
+  // Upload via the lib-upload toolbar button. Click opens the system file
+  // picker; on selection the form posts via fetch and refreshes the library
+  // so the page never reloads
+  const uploadBtn = document.getElementById('lib-upload');
+  const filePick = document.getElementById('file-pick');
+  const uploadForm = document.getElementById('upload-form');
+  if (uploadBtn && filePick && uploadForm) {
+    uploadBtn.addEventListener('click', () => filePick.click());
+    filePick.addEventListener('change', async () => {
+      if (!filePick.files[0]) return;
+      uploadBtn.disabled = true;
+      try {
+        await fetch(uploadForm.action, {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'Accept': 'application/json' },
+          body: new FormData(uploadForm),
+        });
+      } catch {}
+      filePick.value = '';
+      uploadBtn.disabled = false;
+      refreshLibrary();
     });
   }
 
