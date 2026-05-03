@@ -15,7 +15,7 @@ RUN CGO_ENABLED=0 go build \
 
 FROM alpine:3.20
 
-RUN apk add --no-cache ffmpeg ca-certificates tzdata su-exec && \
+RUN apk add --no-cache ffmpeg ca-certificates tzdata su-exec shadow && \
     addgroup -S app && adduser -S -G app -H -h /app app && \
     mkdir -p /music /data && chown -R app:app /music /data
 
