@@ -72,14 +72,6 @@
               Skip
             </button>
           </form>
-          <form method="post" action="/admin/mode" class="flex items-center gap-2">
-            <select name="mode" class="text-sm py-2 pl-3">
-              <option value="shuffle"    {{if eq .Mode "shuffle"}}selected{{end}}>Shuffle</option>
-              <option value="sequential" {{if eq .Mode "sequential"}}selected{{end}}>Sequential</option>
-              <option value="loop"       {{if eq .Mode "loop"}}selected{{end}}>Loop</option>
-            </select>
-            <button class="bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 text-sm px-3 py-2 rounded-lg transition">Apply</button>
-          </form>
         </div>
         <div class="flex items-center gap-2 text-sm text-neutral-400">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-4 h-4"><path stroke-linecap="round" stroke-linejoin="round" d="M12 14a4 4 0 100-8 4 4 0 000 8z"/><path stroke-linecap="round" stroke-linejoin="round" d="M5 21a7 7 0 0114 0H5z"/></svg>
@@ -168,6 +160,13 @@
       <div class="flex items-center justify-between gap-3 mb-3">
         <h3 class="font-semibold">Library <span id="lib-count" class="text-neutral-500 font-normal">({{len .Tracks}})</span></h3>
         <div class="flex items-center gap-2">
+          <form id="mode-form" method="post" action="/admin/mode">
+            <select id="mode-select" name="mode" data-current="{{.Mode}}" class="bg-neutral-950 border border-neutral-800 focus:border-red-600 outline-none rounded-lg px-3 py-1.5 text-sm">
+              <option value="shuffle"    {{if eq .Mode "shuffle"}}selected{{end}}>Shuffle</option>
+              <option value="sequential" {{if eq .Mode "sequential"}}selected{{end}}>Sequential</option>
+              <option value="loop"       {{if eq .Mode "loop"}}selected{{end}}>Loop</option>
+            </select>
+          </form>
           <button id="lib-refresh" type="button" title="Refresh library" class="text-neutral-400 hover:text-white border border-neutral-800 hover:border-neutral-700 rounded-lg px-2 py-1.5 text-xs transition">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-3.5 h-3.5"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v6h6M20 20v-6h-6M5 19a9 9 0 0014.36-3.36M19 5a9 9 0 00-14.36 3.36"/></svg>
           </button>
@@ -419,6 +418,24 @@
   }
 
   document.getElementById('lib-refresh')?.addEventListener('click', refreshLibrary);
+
+  // Mode dropdown: confirm on change, revert on cancel, otherwise submit
+  (function () {
+    const form = document.getElementById('mode-form');
+    const sel = document.getElementById('mode-select');
+    if (!form || !sel) return;
+    sel.addEventListener('change', () => {
+      const prev = sel.dataset.current;
+      const next = sel.value;
+      if (prev === next) return;
+      const labels = { shuffle: 'Shuffle', sequential: 'Sequential', loop: 'Loop' };
+      if (!confirm(`Switch playback mode to ${labels[next] || next}?`)) {
+        sel.value = prev;
+        return;
+      }
+      form.submit();
+    });
+  })();
 
   // Toggle metadata vs filename in the library rows
   const libTable = document.getElementById('lib-table');
