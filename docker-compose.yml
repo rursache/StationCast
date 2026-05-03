@@ -15,7 +15,9 @@ services:
       STATIONCAST_LOUDNORM: "false"
       STATIONCAST_ITUNES_ART: "true"
       STATIONCAST_MAX_LISTENERS: "256"
+      # STATIONCAST_STATION_GENRE: Various
+      # STATIONCAST_GAIN_DB: "0"
       # STATIONCAST_PUBLIC_URL: https://radio.example.com
-      # STATIONCAST_RECAPTCHA_SITE_KEY: <optional google reCAPTCHA v2 site key>
-      # STATIONCAST_RECAPTCHA_SECRET_KEY: <matching reCAPTCHA secret>
+      # STATIONCAST_RECAPTCHA_SITE_KEY: <optional google reCAPTCHA v3 site key>
+      # STATIONCAST_RECAPTCHA_SECRET_KEY: <matching reCAPTCHA v3 secret>
 

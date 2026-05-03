@@ -9,17 +9,24 @@ import (
 	"time"
 )
 
-const recaptchaVerifyURL = "https://www.google.com/recaptcha/api/siteverify"
+const (
+	recaptchaVerifyURL = "https://www.google.com/recaptcha/api/siteverify"
+	recaptchaAction    = "login"
+	recaptchaMinScore  = 0.5
+)
 
 type recaptchaResp struct {
 	Success    bool     `json:"success"`
+	Score      float64  `json:"score"`
+	Action     string   `json:"action"`
 	Hostname   string   `json:"hostname"`
 	ErrorCodes []string `json:"error-codes"`
 }
 
-// verifyRecaptcha returns true when the response token validates against
-// Google's siteverify endpoint. It returns true unconditionally when the
-// secret is empty so deployments without reCAPTCHA configured pass through
+// verifyRecaptcha validates a reCAPTCHA v3 token against Google's siteverify
+// endpoint. It enforces the expected action and a minimum score. It returns
+// true unconditionally when the secret is empty so deployments without
+// reCAPTCHA configured pass through
 func verifyRecaptcha(ctx context.Context, secret, token, remoteIP string) bool {
 	if secret == "" {
 		return true
@@ -49,5 +56,11 @@ func verifyRecaptcha(ctx context.Context, secret, token, remoteIP string) bool {
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 		return false
 	}
-	return out.Success
+	if !out.Success {
+		return false
+	}
+	if out.Action != "" && out.Action != recaptchaAction {
+		return false
+	}
+	return out.Score >= recaptchaMinScore
 }
