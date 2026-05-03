@@ -1,13 +1,24 @@
-FROM golang:1-alpine AS build
+# syntax=docker/dockerfile:1.7
+
+# Run the Go build on the runner's native architecture and let Go cross-
+# compile to TARGETARCH. CGO is off so this needs no toolchain. Avoiding
+# QEMU here drops the multi-arch build from ~12 minutes to a couple
+FROM --platform=$BUILDPLATFORM golang:1-alpine AS build
+
+ARG TARGETOS
+ARG TARGETARCH
 
 WORKDIR /src
 
 COPY go.mod go.sum ./
-RUN go mod download
+RUN --mount=type=cache,target=/go/pkg/mod \
+    go mod download
 
 COPY . .
 
-RUN CGO_ENABLED=0 go build \
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build \
     -trimpath \
     -ldflags="-s -w" \
     -o /out/stationcast \
@@ -20,8 +31,7 @@ RUN apk add --no-cache ffmpeg ca-certificates tzdata su-exec shadow && \
     mkdir -p /music /data && chown -R app:app /music /data
 
 COPY --from=build /out/stationcast /usr/local/bin/stationcast
-COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
-RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+COPY --chmod=0755 docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 
 WORKDIR /app
 
