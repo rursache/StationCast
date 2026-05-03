@@ -77,6 +77,8 @@ STATIONCAST_DATA_DIR=./data \
 | `STATIONCAST_MAX_LISTENERS` | `256` | Hard cap on concurrent `/stream` connections. Excess listeners get HTTP 503. Set to `0` for unlimited (not recommended) |
 | `STATIONCAST_RECAPTCHA_SITE_KEY` | `` | Optional Google reCAPTCHA v3 site key. When set together with the secret, the login form runs an invisible v3 challenge with action `login` |
 | `STATIONCAST_RECAPTCHA_SECRET_KEY` | `` | Optional Google reCAPTCHA v3 secret. Verified against the siteverify endpoint on every login attempt, requiring `success=true`, matching action, and score >= 0.5 |
+| `PUID` | unset (Docker only) | Numeric uid the in-container `app` user runs as. Set to match the host owner of your bind-mounted `/data` (and `/music`) on a NAS or rootless host. Without this the baked-in system user is used |
+| `PGID` | unset (Docker only) | Numeric gid the in-container `app` group uses. Pair with `PUID`. When either is set, the entrypoint chowns `/data` to the new ids on startup |
 
 ## Endpoints
 

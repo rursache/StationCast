@@ -15,13 +15,14 @@ RUN CGO_ENABLED=0 go build \
 
 FROM alpine:3.20
 
-RUN apk add --no-cache ffmpeg ca-certificates tzdata && \
+RUN apk add --no-cache ffmpeg ca-certificates tzdata su-exec && \
     addgroup -S app && adduser -S -G app -H -h /app app && \
     mkdir -p /music /data && chown -R app:app /music /data
 
 COPY --from=build /out/stationcast /usr/local/bin/stationcast
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
-USER app
 WORKDIR /app
 
 ENV STATIONCAST_MUSIC_DIR=/music \
@@ -31,4 +32,5 @@ ENV STATIONCAST_MUSIC_DIR=/music \
 EXPOSE 8000
 VOLUME ["/music", "/data"]
 
-ENTRYPOINT ["/usr/local/bin/stationcast"]
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
+CMD ["/usr/local/bin/stationcast"]

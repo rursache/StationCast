@@ -9,6 +9,8 @@ services:
       - ./music:/music:rw
       - ./data:/data
     environment:
+      # PUID: "1000"
+      # PGID: "1000"
       STATIONCAST_ADMIN_PASSWORD: changeme
       STATIONCAST_STATION_NAME: StationCast
       STATIONCAST_BITRATE: "128"
