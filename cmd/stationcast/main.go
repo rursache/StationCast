@@ -72,7 +72,7 @@ func main() {
 		logger.Warn("scheduler restore", "err", err)
 	}
 
-	engine := audio.NewEngine(cfg, sched, hub)
+	engine := audio.NewEngine(cfg, sched, hub, lib)
 	go engine.Run(ctx)
 
 	router, authSweep := httpx.NewRouter(cfg, db, lib, sched, hub, hls, engine)

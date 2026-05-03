@@ -27,13 +27,14 @@ type Engine struct {
 	cfg   *config.Config
 	sched *playlist.Scheduler
 	hub   *broadcast.Hub
+	lib   *playlist.Library
 
 	mu     sync.Mutex
 	curCmd *exec.Cmd
 }
 
-func NewEngine(cfg *config.Config, sched *playlist.Scheduler, hub *broadcast.Hub) *Engine {
-	return &Engine{cfg: cfg, sched: sched, hub: hub}
+func NewEngine(cfg *config.Config, sched *playlist.Scheduler, hub *broadcast.Hub, lib *playlist.Library) *Engine {
+	return &Engine{cfg: cfg, sched: sched, hub: hub, lib: lib}
 }
 
 func (e *Engine) Skip() {

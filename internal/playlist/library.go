@@ -41,6 +41,11 @@ type Library struct {
 	mu     sync.RWMutex
 	byPath map[string]*Track
 	byID   map[int64]*Track
+
+	// lastRefresh throttles per-song iTunes refresh attempts. Keyed by
+	// songKey, value is time.Time. Songs that re-fire within
+	// refreshThrottle (eg user spamming Skip) reuse the prior result
+	lastRefresh sync.Map
 }
 
 func NewLibrary(cfg *config.Config, db *storage.DB) *Library {

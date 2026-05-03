@@ -239,6 +239,54 @@ func (l *Library) FetchMissingArt(ctx context.Context) {
 	}
 }
 
+// refreshThrottle bounds how often a single (artist, title) is re-queried.
+// 30s is generous enough to absorb burst events (rapid Skip presses) while
+// short enough that a song playing twice in normal rotation gets a fresh
+// lookup each time
+const refreshThrottle = 30 * time.Second
+
+// RefreshArt re-queries iTunes for a single track and overwrites the on-disk
+// artwork if a result is returned. Intended to be fired asynchronously when a
+// track starts playing, so libraries with bad-on-first-fetch artwork
+// self-heal as songs cycle through the schedule. A no-op when the iTunes
+// integration is disabled, when artist or title is empty, or when the same
+// song was refreshed within refreshThrottle
+func (l *Library) RefreshArt(ctx context.Context, t *Track) {
+	if !l.cfg.ITunesArt || t == nil || t.Artist == "" || t.Title == "" {
+		return
+	}
+	k := songKey{normKey(t.Artist), normKey(t.Title)}
+	now := time.Now()
+	if prev, ok := l.lastRefresh.Load(k); ok {
+		if now.Sub(prev.(time.Time)) < refreshThrottle {
+			return
+		}
+	}
+	l.lastRefresh.Store(k, now)
+
+	client := &http.Client{Timeout: 10 * time.Second, CheckRedirect: safeRedirect}
+	artURL, err := FetchArtworkURL(ctx, client, t.Artist, t.Title)
+	if err != nil {
+		slog.Debug("itunes: refresh lookup failed", "id", t.ID, "title", t.Title, "err", err)
+		return
+	}
+	if artURL == "" {
+		return
+	}
+	dst := filepath.Join(l.cfg.DataDir, "art", fmt.Sprintf("%d.jpg", t.ID))
+	if err := downloadTo(ctx, client, artURL, dst); err != nil {
+		slog.Debug("itunes: refresh download failed", "id", t.ID, "err", err)
+		return
+	}
+	_, _ = l.db.Exec(`UPDATE tracks SET has_art = 1, art_tried = ? WHERE id = ?`, itunesLookupVersion, t.ID)
+	l.mu.Lock()
+	if existing, ok := l.byID[t.ID]; ok {
+		existing.HasArt = true
+	}
+	l.mu.Unlock()
+	slog.Info("itunes: art refreshed", "id", t.ID, "artist", t.Artist, "title", t.Title)
+}
+
 func (l *Library) markArtTried(rows []artCandidate) {
 	for _, r := range rows {
 		_, _ = l.db.Exec(`UPDATE tracks SET art_tried = ? WHERE id = ?`, itunesLookupVersion, r.id)

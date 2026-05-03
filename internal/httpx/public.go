@@ -114,7 +114,12 @@ func (s *Server) handleArt(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	path := filepath.Join(s.cfg.DataDir, "art", strconv.FormatInt(id, 10)+".jpg")
-	w.Header().Set("Cache-Control", "public, max-age=3600")
+	// max-age=0 + must-revalidate makes the browser revalidate every request
+	// so the on-disk file getting overwritten by a RefreshArt run propagates
+	// to clients immediately. http.ServeFile sets Last-Modified from the
+	// file mtime and answers If-Modified-Since with 304, so the bandwidth
+	// cost is just the headers exchange when the file has not changed
+	w.Header().Set("Cache-Control", "public, max-age=0, must-revalidate")
 	http.ServeFile(w, r, path)
 }
 

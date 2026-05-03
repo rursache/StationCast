@@ -50,6 +50,10 @@ func (s *pcmSource) Read(p []byte) (int, error) {
 			line := t.DisplayLine(s.eng.cfg.StationName)
 			s.eng.hub.SetMetadata(line)
 			slog.Info("now playing", "id", t.ID, "title", line)
+			// Re-query iTunes asynchronously so any stale or wrong artwork
+			// gets corrected on the next play. RefreshArt itself throttles
+			// per song, so rapid Skip events do not burst the API
+			go s.eng.lib.RefreshArt(s.ctx, t)
 		}
 		n, err := s.curOut.Read(p)
 		if n > 0 {
