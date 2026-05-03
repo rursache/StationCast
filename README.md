@@ -6,7 +6,7 @@
 
 A small, self-contained internet radio server in Go. Drop audio files into a directory and they're broadcast live to every listener, Icecast/SHOUTcast style, with a simple admin and a public listener UI
 
-<img width="2582" alt="ScreenShot_2026-05-03_13 44 46" src="https://github.com/user-attachments/assets/24dbc20f-e86e-4255-b0e1-9eaaea2fbbe1" />
+<img width="2625" alt="Admin Dashboard" src="https://github.com/user-attachments/assets/b67aae24-548f-4d9f-8cf3-5dc159306f69" />
 
 ## Features
 
@@ -67,7 +67,7 @@ STATIONCAST_DATA_DIR=./data \
 ./bin/stationcast
 ```
 
-<img width="2514" alt="ScreenShot_2026-05-03_13 45 10" src="https://github.com/user-attachments/assets/e3c7fd02-b152-46d0-aa13-fa0f429e4eac" />
+<img width="2422" alt="Public Page" src="https://github.com/user-attachments/assets/b6126ed8-7e6d-4796-b4c3-c66fc60961ff" />
 
 ## How it works
 
