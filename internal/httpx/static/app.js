@@ -122,7 +122,7 @@
   }
   connectSSE();
 
-  // Copy-to-clipboard for tune-in URLs
+  // Copy-to-clipboard for stream URLs
   document.querySelectorAll('button.copy').forEach(b => {
     b.addEventListener('click', async () => {
       try {
@@ -133,5 +133,68 @@
         setTimeout(() => { b.textContent = orig; b.classList.remove('text-emerald-400'); }, 1200);
       } catch {}
     });
+  });
+
+  // Modal open/close logic. Both modals share the same skeleton: a toggle of
+  // `hidden` plus `flex` on the outer wrapper, and any descendant matching
+  // .modal-close or the .modal-backdrop closes the modal
+  function escapeHTML(s) { return (s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+  function openModal(el) {
+    if (!el) return;
+    el.classList.remove('hidden');
+    el.classList.add('flex');
+    el.setAttribute('aria-hidden', 'false');
+  }
+  function closeModal(el) {
+    if (!el) return;
+    el.classList.add('hidden');
+    el.classList.remove('flex');
+    el.setAttribute('aria-hidden', 'true');
+  }
+  document.querySelectorAll('[id^="modal-"]').forEach(m => {
+    m.querySelectorAll('.modal-close, .modal-backdrop').forEach(el => {
+      el.addEventListener('click', () => closeModal(m));
+    });
+  });
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') {
+      document.querySelectorAll('[id^="modal-"]').forEach(closeModal);
+    }
+  });
+
+  document.getElementById('open-streams')?.addEventListener('click', () => {
+    openModal(document.getElementById('modal-streams'));
+  });
+
+  document.getElementById('open-history')?.addEventListener('click', async () => {
+    const modal = document.getElementById('modal-history');
+    const list = document.getElementById('history-list');
+    if (list) list.innerHTML = `<li class="text-neutral-500 italic px-2 py-2">Loading…</li>`;
+    openModal(modal);
+    try {
+      const r = await fetch('/history', { cache: 'no-store' });
+      if (!r.ok) throw new Error('fetch failed');
+      const items = await r.json();
+      if (!Array.isArray(items) || items.length === 0) {
+        if (list) list.innerHTML = `<li class="text-neutral-500 italic px-2 py-2">No tracks have played yet</li>`;
+        return;
+      }
+      if (list) {
+        list.innerHTML = items.map(t => `
+          <li class="flex items-center gap-3 bg-neutral-950/40 rounded-lg px-3 py-2">
+            <div class="w-9 h-9 rounded bg-neutral-800 flex-shrink-0 overflow-hidden flex items-center justify-center">
+              ${t.has_art && t.art_url
+                ? `<img src="${escapeHTML(t.art_url)}" alt="" class="w-full h-full object-cover">`
+                : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="w-4 h-4 text-neutral-600"><path stroke-linecap="round" stroke-linejoin="round" d="M9 19V5l12-2v14"/><circle cx="6" cy="19" r="3" stroke-linecap="round" stroke-linejoin="round"/><circle cx="18" cy="16" r="3" stroke-linecap="round" stroke-linejoin="round"/></svg>`}
+            </div>
+            <div class="min-w-0 flex-1">
+              <div class="truncate">${escapeHTML(t.title) || '<span class="text-neutral-500">untitled</span>'}</div>
+              <div class="text-xs text-neutral-500 truncate">${escapeHTML(t.artist || '')}</div>
+            </div>
+          </li>`).join('');
+      }
+    } catch {
+      if (list) list.innerHTML = `<li class="text-rose-400 italic px-2 py-2">Could not load history</li>`;
+    }
   });
 })();
