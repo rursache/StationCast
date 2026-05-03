@@ -283,6 +283,28 @@
     });
     audio.addEventListener('play', () => setPlaying(true));
     audio.addEventListener('pause', () => setPlaying(false));
+
+    // Stall recovery. The browser's <audio> can silently deadlock if the
+    // upstream connection is dropped or the buffer underruns past its retry
+    // threshold. Watch currentTime advancement while playing - if it freezes
+    // for several seconds, force a reconnect by reassigning src
+    let lastT = 0;
+    let stuckSince = 0;
+    function recover() {
+      try { setSrc(); audio.load(); audio.play().catch(() => {}); } catch {}
+    }
+    setInterval(() => {
+      if (audio.paused) { stuckSince = 0; lastT = audio.currentTime; return; }
+      if (audio.currentTime !== lastT) {
+        lastT = audio.currentTime;
+        stuckSince = 0;
+        return;
+      }
+      if (stuckSince === 0) stuckSince = Date.now();
+      else if (Date.now() - stuckSince > 6000) { stuckSince = 0; recover(); }
+    }, 1000);
+    audio.addEventListener('error', () => { if (!audio.paused) recover(); });
+    audio.addEventListener('stalled', () => { stuckSince = stuckSince || Date.now(); });
   })();
 </script>
 <script>

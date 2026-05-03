@@ -68,6 +68,32 @@
   player.addEventListener('pause', () => setPlayState(false));
   player.addEventListener('ended', () => setPlayState(false));
 
+  // Stall recovery. The browser's <audio> can silently deadlock if the
+  // upstream connection is dropped or the buffer underruns past its retry
+  // threshold. Watch currentTime advancement while playing - if it freezes
+  // for several seconds, force a reconnect by reassigning src
+  let lastT = 0;
+  let stuckSince = 0;
+  function recover() {
+    try {
+      setSource();
+      player.load();
+      player.play().catch(() => {});
+    } catch {}
+  }
+  setInterval(() => {
+    if (player.paused) { stuckSince = 0; lastT = player.currentTime; return; }
+    if (player.currentTime !== lastT) {
+      lastT = player.currentTime;
+      stuckSince = 0;
+      return;
+    }
+    if (stuckSince === 0) stuckSince = Date.now();
+    else if (Date.now() - stuckSince > 6000) { stuckSince = 0; recover(); }
+  }, 1000);
+  player.addEventListener('error', () => { if (!player.paused) recover(); });
+  player.addEventListener('stalled', () => { stuckSince = stuckSince || Date.now(); });
+
   let lastArtURL = '';
   function applyNowPlaying(np) {
     titleEl.textContent = np.title || 'Off air';

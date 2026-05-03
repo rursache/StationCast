@@ -6,7 +6,12 @@ import (
 	"sync/atomic"
 )
 
-const subBufferChunks = 64
+// Per-subscriber channel depth. ffmpeg with -flush_packets 1 emits one MP3
+// frame per write (~26ms at 128kbps), so 512 slots is roughly 13s of audio.
+// A slow client that briefly falls behind (tab throttle, GC pause, network
+// blip) gets a generous tolerance window before the hub drops it. Hub fan-out
+// still drops slow listeners rather than back-pressuring the encoder
+const subBufferChunks = 512
 
 type Subscriber struct {
 	hub *Hub

@@ -64,7 +64,13 @@ func (s *pcmSource) Read(p []byte) (int, error) {
 		}
 		if err != nil {
 			_ = s.curOut.Close()
-			_ = s.curCmd.Wait()
+			// Reap the decoder process without blocking the PCM pump. A normal
+			// EOF + Wait returns immediately, but a wedged ffmpeg (eg corrupt
+			// file with a seek loop) could otherwise freeze every listener.
+			// Fire-and-forget: exec.CommandContext is bound to s.ctx, so engine
+			// shutdown still kills the process
+			cmd := s.curCmd
+			go func() { _ = cmd.Wait() }()
 			s.eng.mu.Lock()
 			s.eng.curCmd = nil
 			s.eng.mu.Unlock()
