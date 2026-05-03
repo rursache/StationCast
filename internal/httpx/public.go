@@ -51,6 +51,36 @@ func (s *Server) handleNowPlayingJSON(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(s.currentNowPlaying())
 }
 
+type historyEntry struct {
+	ID     int64  `json:"id"`
+	Title  string `json:"title"`
+	Artist string `json:"artist"`
+	Album  string `json:"album"`
+	HasArt bool   `json:"has_art"`
+	ArtURL string `json:"art_url,omitempty"`
+}
+
+func (s *Server) handleHistoryJSON(w http.ResponseWriter, r *http.Request) {
+	tracks := s.sched.History()
+	out := make([]historyEntry, 0, len(tracks))
+	for _, t := range tracks {
+		entry := historyEntry{
+			ID:     t.ID,
+			Title:  t.Title,
+			Artist: t.DisplayArtist(s.cfg.StationName),
+			Album:  t.Album,
+			HasArt: t.HasArt,
+		}
+		if t.HasArt {
+			entry.ArtURL = "/art/" + strconv.FormatInt(t.ID, 10)
+		}
+		out = append(out, entry)
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+	_ = json.NewEncoder(w).Encode(out)
+}
+
 func (s *Server) handleNowPlayingSSE(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache, no-store")

@@ -54,6 +54,7 @@ func NewRouter(cfg *config.Config, db *storage.DB, lib *playlist.Library, sched 
 	r.Get("/", s.handlePublicHome)
 	r.Get("/now-playing", s.handleNowPlayingJSON)
 	r.Get("/now-playing/sse", s.handleNowPlayingSSE)
+	r.Get("/history", s.handleHistoryJSON)
 	r.Get("/art/{id}", s.handleArt)
 	r.Get("/static/*", s.handleStatic)
 

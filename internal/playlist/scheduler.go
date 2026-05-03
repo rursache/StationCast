@@ -31,12 +31,22 @@ type Scheduler struct {
 	db  *storage.DB
 	lib *Library
 
-	mu        sync.Mutex
-	mode      Mode
-	current   *Track
-	manual    []int64
-	recent    []int64
-	skipNext  bool
+	mu       sync.Mutex
+	mode     Mode
+	current  *Track
+	manual   []int64
+	recent   []int64
+	skipNext bool
+
+	// Deck shuffle state. The deck is a freshly-shuffled list of track ids
+	// drawn one at a time. When deckPos catches the tail, the deck is
+	// rebuilt from the current library snapshot. State is in-memory only,
+	// so a restart yields a fresh deck. Library mutations during a deck
+	// cycle are absorbed transparently: deleted ids are skipped, newly
+	// added tracks join only on the next reshuffle. Manual queue plays do
+	// not advance deckPos
+	deck    []int64
+	deckPos int
 }
 
 func NewScheduler(cfg *config.Config, db *storage.DB, lib *Library) *Scheduler {
@@ -253,37 +263,49 @@ func (s *Scheduler) Pick() *Track {
 	}
 }
 
+// pickShuffle draws the next track from the deck. When the deck is exhausted
+// or empty it is rebuilt from the live library snapshot, shuffled, and the
+// position reset. Each track plays exactly once per deck cycle. Tracks
+// removed mid-cycle are silently skipped; tracks added mid-cycle join only
+// on the next rebuild
 func (s *Scheduler) pickShuffle(tracks []*Track) *Track {
+	if len(tracks) == 0 {
+		return nil
+	}
 	s.mu.Lock()
-	recent := map[int64]bool{}
-	window := historyWindow
-	if w := len(tracks) / 3; w < window {
-		window = w
+	defer s.mu.Unlock()
+	if s.deckPos >= len(s.deck) {
+		s.rebuildDeckLocked(tracks)
 	}
-	if window < 1 && len(tracks) > 1 {
-		window = 1
-	}
-	if window > len(tracks)-1 {
-		window = len(tracks) - 1
-	}
-	for i, id := range s.recent {
-		if i >= window {
-			break
+	// At most two passes: first drains the current deck, second drains a
+	// fresh rebuild. If neither yields a valid track the library is empty
+	for attempt := 0; attempt < 2; attempt++ {
+		for s.deckPos < len(s.deck) {
+			id := s.deck[s.deckPos]
+			s.deckPos++
+			if t, ok := s.lib.Get(id); ok {
+				return t
+			}
 		}
-		recent[id] = true
+		s.rebuildDeckLocked(tracks)
 	}
-	s.mu.Unlock()
+	return nil
+}
 
-	candidates := make([]*Track, 0, len(tracks))
-	for _, t := range tracks {
-		if !recent[t.ID] {
-			candidates = append(candidates, t)
-		}
+// rebuildDeckLocked must be called while s.mu is held
+func (s *Scheduler) rebuildDeckLocked(tracks []*Track) {
+	if len(tracks) == 0 {
+		s.deck = nil
+		s.deckPos = 0
+		return
 	}
-	if len(candidates) == 0 {
-		candidates = tracks
+	ids := make([]int64, len(tracks))
+	for i, t := range tracks {
+		ids[i] = t.ID
 	}
-	return candidates[rand.IntN(len(candidates))]
+	rand.Shuffle(len(ids), func(i, j int) { ids[i], ids[j] = ids[j], ids[i] })
+	s.deck = ids
+	s.deckPos = 0
 }
 
 // MarkPlaying records the track as the current one and updates history.
@@ -341,6 +363,22 @@ func (s *Scheduler) Peek() *Track {
 			}
 		}
 		return tracks[0]
+	case ModeShuffle:
+		s.mu.Lock()
+		var nextID int64
+		var have bool
+		if s.deckPos < len(s.deck) {
+			nextID = s.deck[s.deckPos]
+			have = true
+		}
+		s.mu.Unlock()
+		if !have {
+			return nil
+		}
+		if t, ok := s.lib.Get(nextID); ok {
+			return t
+		}
+		return nil
 	default:
 		return nil
 	}

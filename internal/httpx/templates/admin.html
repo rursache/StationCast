@@ -93,12 +93,16 @@
     <!-- Left column: Queue + Upload (with footer) -->
     <div class="lg:col-span-1 flex flex-col gap-6 min-h-0">
 
-      <section class="bg-neutral-900/60 backdrop-blur border border-neutral-800 rounded-2xl p-5 flex-1 min-h-0 flex flex-col">
-        <div class="flex items-center justify-between mb-3 flex-shrink-0">
-          <h3 class="font-semibold">Queue</h3>
-          <span class="text-xs text-neutral-500">{{len .Queue}} item{{if ne (len .Queue) 1}}s{{end}}</span>
+      <section id="queue-history-section" class="bg-neutral-900/60 backdrop-blur border border-neutral-800 rounded-2xl p-5 flex-1 min-h-0 flex flex-col">
+        <div class="flex items-center justify-between mb-3 flex-shrink-0 gap-2">
+          <div class="flex items-center gap-1 bg-neutral-950/60 border border-neutral-800 rounded-lg p-0.5">
+            <button id="qh-tab-queue" type="button" data-active="true" class="text-sm font-medium px-3 py-1 rounded-md transition data-[active=true]:bg-neutral-800 data-[active=true]:text-white text-neutral-400 hover:text-white">Queue</button>
+            <button id="qh-tab-history" type="button" data-active="false" class="text-sm font-medium px-3 py-1 rounded-md transition data-[active=true]:bg-neutral-800 data-[active=true]:text-white text-neutral-400 hover:text-white">History</button>
+          </div>
+          <span id="qh-count" class="text-xs text-neutral-500">{{len .Queue}} item{{if ne (len .Queue) 1}}s{{end}}</span>
         </div>
-        <div class="flex-1 min-h-0 overflow-y-auto -mr-2 pr-2">
+
+        <div id="qh-pane-queue" class="flex-1 min-h-0 overflow-y-auto -mr-2 pr-2">
           {{if .Queue}}
           <ol class="space-y-1.5">
             {{range $i, $t := .Queue}}
@@ -115,7 +119,22 @@
             {{end}}
           </ol>
           {{else}}
-          <p class="text-sm text-neutral-500 italic">Empty — shuffle picks tracks automatically</p>
+          <p class="text-sm text-neutral-500 italic">Empty - shuffle picks tracks automatically</p>
+          {{end}}
+        </div>
+
+        <div id="qh-pane-history" class="hidden flex-1 min-h-0 overflow-y-auto -mr-2 pr-2">
+          {{if .History}}
+          <ol class="space-y-1.5">
+            {{range $i, $t := .History}}
+            <li class="flex items-center gap-2 text-sm bg-neutral-950/40 rounded-lg px-3 py-2">
+              <span class="text-neutral-600 text-xs w-5 text-right">{{add $i 1}}</span>
+              <span class="flex-1 truncate">{{displayTitle $t.Title $t.Artist}}</span>
+            </li>
+            {{end}}
+          </ol>
+          {{else}}
+          <p class="text-sm text-neutral-500 italic">No tracks have played yet</p>
           {{end}}
         </div>
       </section>
@@ -414,6 +433,31 @@
       libToggle.title = next ? 'Show metadata' : 'Show filenames';
     });
   }
+
+  // Queue / History tabs
+  (function () {
+    const tabQ = document.getElementById('qh-tab-queue');
+    const tabH = document.getElementById('qh-tab-history');
+    const paneQ = document.getElementById('qh-pane-queue');
+    const paneH = document.getElementById('qh-pane-history');
+    const count = document.getElementById('qh-count');
+    if (!tabQ || !tabH || !paneQ || !paneH) return;
+    const queueCount = parseInt(count?.dataset.queueCount || '0', 10) || ({{len .Queue}});
+    const historyCount = ({{len .History}});
+    function show(which) {
+      const isQ = which === 'queue';
+      tabQ.dataset.active = String(isQ);
+      tabH.dataset.active = String(!isQ);
+      paneQ.classList.toggle('hidden', !isQ);
+      paneH.classList.toggle('hidden', isQ);
+      if (count) {
+        const n = isQ ? queueCount : historyCount;
+        count.textContent = `${n} item${n === 1 ? '' : 's'}`;
+      }
+    }
+    tabQ.addEventListener('click', () => show('queue'));
+    tabH.addEventListener('click', () => show('history'));
+  })();
 
   document.addEventListener('visibilitychange', () => { if (!document.hidden) { refreshNowPlaying(); refreshLibrary(); } });
 
