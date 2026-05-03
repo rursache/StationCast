@@ -504,11 +504,11 @@
   document.getElementById('lib-refresh')?.addEventListener('click', refreshLibrary);
 
   // Mode dropdown: confirm on change, revert on cancel, otherwise submit
+  // via fetch so the page doesn't reload and break the audio monitor
   (function () {
-    const form = document.getElementById('mode-form');
     const sel = document.getElementById('mode-select');
-    if (!form || !sel) return;
-    sel.addEventListener('change', () => {
+    if (!sel) return;
+    sel.addEventListener('change', async () => {
       const prev = sel.dataset.current;
       const next = sel.value;
       if (prev === next) return;
@@ -517,7 +517,18 @@
         sel.value = prev;
         return;
       }
-      form.submit();
+      try {
+        const r = await fetch('/admin/mode', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'Accept': 'application/json' },
+          body: new URLSearchParams({ mode: next }),
+        });
+        if (!r.ok) throw new Error('mode change failed');
+        sel.dataset.current = next;
+      } catch {
+        sel.value = prev;
+      }
     });
   })();
 
@@ -554,16 +565,29 @@
     tabH.addEventListener('click', () => show('history'));
   })();
 
-  // Skip via fetch so the page does not reload (which would interrupt the
-  // admin's local audio monitor). The server emits 204 No Content for
-  // JSON-aware clients. SSE will fire shortly with the next track
-  document.getElementById('skip-form')?.addEventListener('submit', e => {
+  // AJAX-submit any admin POST form that mutates playback or queue state so
+  // the page never reloads (which would interrupt the in-browser audio
+  // monitor). The server emits 204 No Content for JSON-aware clients
+  const ajaxAdminPaths = new Set([
+    '/admin/skip',
+    '/admin/queue',
+    '/admin/queue/remove',
+  ]);
+  document.addEventListener('submit', async e => {
+    const f = e.target;
+    if (!(f instanceof HTMLFormElement)) return;
+    const u = new URL(f.action, location.origin);
+    if (!ajaxAdminPaths.has(u.pathname)) return;
     e.preventDefault();
-    fetch('/admin/skip', {
-      method: 'POST',
-      credentials: 'same-origin',
-      headers: { 'Accept': 'application/json' },
-    }).catch(() => {});
+    try {
+      await fetch(u.pathname, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Accept': 'application/json' },
+        body: new URLSearchParams(new FormData(f)),
+      });
+    } catch {}
+    refreshAdminState();
   });
 
   // Live now-playing via SSE. The same channel the public page uses, so

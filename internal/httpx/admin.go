@@ -172,7 +172,7 @@ func (s *Server) handleSetMode(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
-	http.Redirect(w, r, "/admin/", http.StatusSeeOther)
+	respondAdminPostOK(w, r)
 }
 
 func (s *Server) handleEnqueue(w http.ResponseWriter, r *http.Request) {
@@ -190,7 +190,7 @@ func (s *Server) handleEnqueue(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "enqueue failed", http.StatusBadRequest)
 		return
 	}
-	http.Redirect(w, r, "/admin/", http.StatusSeeOther)
+	respondAdminPostOK(w, r)
 }
 
 func (s *Server) handleDequeue(w http.ResponseWriter, r *http.Request) {
@@ -206,6 +206,18 @@ func (s *Server) handleDequeue(w http.ResponseWriter, r *http.Request) {
 	if err := s.sched.Dequeue(idx); err != nil {
 		slog.Warn("dequeue", "idx", idx, "err", err)
 		http.Error(w, "dequeue failed", http.StatusBadRequest)
+		return
+	}
+	respondAdminPostOK(w, r)
+}
+
+// respondAdminPostOK is the canonical reply for admin POST endpoints that
+// alter playback / queue state. JSON-aware callers (fetch with Accept:
+// application/json, or HTMX) get 204 so the page doesn't reload, plain
+// browser form submits still get the classic 303 redirect to /admin/
+func respondAdminPostOK(w http.ResponseWriter, r *http.Request) {
+	if isHTMX(r) || acceptsJSON(r) {
+		w.WriteHeader(http.StatusNoContent)
 		return
 	}
 	http.Redirect(w, r, "/admin/", http.StatusSeeOther)

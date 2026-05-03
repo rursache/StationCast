@@ -66,12 +66,19 @@ func (e *Engine) Run(ctx context.Context) {
 }
 
 func (e *Engine) runOnce(ctx context.Context) error {
+	// -flush_packets 1 forces the mp3 muxer to flush every encoded packet
+	// (one mp3 frame, ~26ms) instead of batching them. Without this the
+	// libmp3lame muxer collects packets internally and emits bursts that
+	// Chrome's <audio> jitter buffer cannot smooth over, producing audible
+	// stutter. VLC and iOS players buffer enough to mask the burstiness so
+	// they sound clean either way
 	encCmd := exec.CommandContext(ctx, "ffmpeg",
 		"-hide_banner", "-loglevel", "warning",
 		"-f", "s16le", "-ar", fmt.Sprint(sampleRate), "-ac", fmt.Sprint(channels), "-i", "pipe:0",
 		"-c:a", "libmp3lame", "-b:a", fmt.Sprintf("%dk", e.cfg.Bitrate),
 		"-ar", fmt.Sprint(sampleRate), "-ac", fmt.Sprint(channels),
 		"-f", "mp3", "-write_xing", "0", "-id3v2_version", "0",
+		"-flush_packets", "1",
 		"pipe:1",
 	)
 	encStdin, err := encCmd.StdinPipe()
