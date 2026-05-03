@@ -8,10 +8,10 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="/static/app.css">
 </head>
-<body class="min-h-screen bg-gradient-to-b from-neutral-950 via-neutral-950 to-neutral-900">
-<div class="max-w-7xl mx-auto px-4 py-6">
+<body class="h-screen overflow-hidden bg-gradient-to-b from-neutral-950 via-neutral-950 to-neutral-900">
+<div class="h-full max-w-7xl mx-auto px-4 py-6 flex flex-col gap-6">
 
-  <header class="flex items-center justify-between mb-8">
+  <header class="flex items-center justify-between flex-shrink-0">
     <div class="flex items-center gap-3">
       <img src="/static/icon.svg" alt="" class="w-9 h-9 rounded-lg shadow-lg shadow-red-900/40">
       <div>
@@ -28,36 +28,36 @@
   </header>
 
   <!-- Now playing hero -->
-  <section class="bg-neutral-900/60 backdrop-blur border border-neutral-800 rounded-2xl p-5 mb-6">
-    <div class="flex flex-col md:flex-row gap-5">
-      <div id="np-art" class="w-32 h-32 md:w-36 md:h-36 rounded-xl overflow-hidden bg-neutral-800 flex-shrink-0 flex items-center justify-center">
+  <section class="bg-neutral-900/60 backdrop-blur border border-neutral-800 rounded-2xl p-4 flex-shrink-0">
+    <div class="flex flex-col md:flex-row gap-4">
+      <div id="np-art" class="w-20 h-20 md:w-24 md:h-24 rounded-xl overflow-hidden bg-neutral-800 flex-shrink-0 flex items-center justify-center">
         {{if and .Current .Current.HasArt}}
           <img src="/art/{{.Current.ID}}" alt="" class="w-full h-full object-cover">
         {{else}}
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="w-12 h-12 text-neutral-600"><path stroke-linecap="round" stroke-linejoin="round" d="M9 19V5l12-2v14"/><circle cx="6" cy="19" r="3" stroke-linecap="round" stroke-linejoin="round"/><circle cx="18" cy="16" r="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="w-10 h-10 text-neutral-600"><path stroke-linecap="round" stroke-linejoin="round" d="M9 19V5l12-2v14"/><circle cx="6" cy="19" r="3" stroke-linecap="round" stroke-linejoin="round"/><circle cx="18" cy="16" r="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
         {{end}}
       </div>
-      <div class="flex-1 min-w-0 flex flex-col justify-between gap-3">
-        <div>
-          <div class="flex items-center gap-2 mb-1">
-            <span class="relative flex h-2 w-2">
-              <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-500 opacity-75"></span>
-              <span class="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
-            </span>
-            <span class="text-[11px] uppercase tracking-widest text-red-400 font-medium">On air</span>
-            <span class="text-[11px] uppercase tracking-widest text-neutral-600 ml-2">Now playing</span>
-          </div>
-          <h2 id="np-title" class="text-xl md:text-2xl font-semibold truncate">
-            {{if .Current}}{{.Current.Title}}{{else}}Idle{{end}}
-          </h2>
-          <p id="np-artist" class="text-sm text-neutral-400 truncate">
-            {{if .Current}}{{.Current.Artist}}{{if .Current.Album}} · {{.Current.Album}}{{end}}{{else}}Waiting for tracks{{end}}
-          </p>
-          <p id="np-next" class="text-xs text-neutral-500 mt-2 truncate">
-            Up next: {{if .Next}}{{displayTitle .Next.Title .Next.Artist}}{{else}}—{{end}}
-          </p>
+      <div class="flex-1 min-w-0">
+        <div class="flex items-center gap-2 mb-1">
+          <span class="relative flex h-2 w-2">
+            <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-500 opacity-75"></span>
+            <span class="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+          </span>
+          <span class="text-[11px] uppercase tracking-widest text-red-400 font-medium">On air</span>
+          <span class="text-[11px] uppercase tracking-widest text-neutral-600 ml-2">Now playing</span>
         </div>
-        <div class="flex flex-wrap items-center gap-2">
+        <h2 id="np-title" class="text-lg md:text-xl font-semibold truncate">
+          {{if .Current}}{{.Current.Title}}{{else}}Idle{{end}}
+        </h2>
+        <p id="np-artist" class="text-sm text-neutral-400 truncate">
+          {{if .Current}}{{.Current.Artist}}{{if .Current.Album}} · {{.Current.Album}}{{end}}{{else}}Waiting for tracks{{end}}
+        </p>
+        <p id="np-next" class="text-xs text-neutral-500 mt-1 truncate">
+          Up next: {{if .Next}}{{displayTitle .Next.Title .Next.Artist}}{{else}}—{{end}}
+        </p>
+      </div>
+      <div class="flex flex-col items-end justify-between gap-2 min-w-0">
+        <div class="flex items-center gap-2 flex-wrap justify-end">
           <button id="local-play" type="button" aria-label="Listen" class="inline-flex items-center justify-center w-10 h-10 rounded-full bg-red-700 hover:bg-red-600 text-white shadow-lg shadow-red-900/40 transition" title="Listen to the broadcast in this browser">
             <svg id="local-play-icon" viewBox="0 0 24 24" fill="currentColor" class="w-4 h-4 ml-0.5"><path d="M8 5v14l11-7z"/></svg>
             <svg id="local-pause-icon" viewBox="0 0 24 24" fill="currentColor" class="w-4 h-4 hidden"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg>
@@ -80,63 +80,68 @@
             </select>
             <button class="bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 text-sm px-3 py-2 rounded-lg transition">Apply</button>
           </form>
-          <div class="ml-auto flex items-center gap-2 text-sm text-neutral-400">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-4 h-4"><path stroke-linecap="round" stroke-linejoin="round" d="M12 14a4 4 0 100-8 4 4 0 000 8z"/><path stroke-linecap="round" stroke-linejoin="round" d="M5 21a7 7 0 0114 0H5z"/></svg>
-            <span><strong id="np-listeners" class="text-white">{{.Listeners}}</strong> listening</span>
-          </div>
+        </div>
+        <div class="flex items-center gap-2 text-sm text-neutral-400">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-4 h-4"><path stroke-linecap="round" stroke-linejoin="round" d="M12 14a4 4 0 100-8 4 4 0 000 8z"/><path stroke-linecap="round" stroke-linejoin="round" d="M5 21a7 7 0 0114 0H5z"/></svg>
+          <span><strong id="np-listeners" class="text-white">{{.Listeners}}</strong> listening</span>
         </div>
       </div>
     </div>
   </section>
 
-  <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-    <!-- Left column: Queue + Upload -->
-    <div class="lg:col-span-1 space-y-6">
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 flex-1 min-h-0">
+    <!-- Left column: Queue + Upload (with footer) -->
+    <div class="lg:col-span-1 flex flex-col gap-6 min-h-0">
 
-      <section class="bg-neutral-900/60 backdrop-blur border border-neutral-800 rounded-2xl p-5">
-        <div class="flex items-center justify-between mb-3">
+      <section class="bg-neutral-900/60 backdrop-blur border border-neutral-800 rounded-2xl p-5 flex-1 min-h-0 flex flex-col">
+        <div class="flex items-center justify-between mb-3 flex-shrink-0">
           <h3 class="font-semibold">Queue</h3>
           <span class="text-xs text-neutral-500">{{len .Queue}} item{{if ne (len .Queue) 1}}s{{end}}</span>
         </div>
-        {{if .Queue}}
-        <ol class="space-y-1.5">
-          {{range $i, $t := .Queue}}
-          <li class="group flex items-center gap-2 text-sm bg-neutral-950/40 hover:bg-neutral-800/40 rounded-lg px-3 py-2">
-            <span class="text-neutral-600 text-xs w-5 text-right">{{add $i 1}}</span>
-            <span class="flex-1 truncate">{{displayTitle $t.Title $t.Artist}}</span>
-            <form method="post" action="/admin/queue/remove">
-              <input type="hidden" name="idx" value="{{$i}}">
-              <button class="opacity-0 group-hover:opacity-100 text-neutral-500 hover:text-red-400 text-xs transition" title="Remove">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-4 h-4"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
-              </button>
-            </form>
-          </li>
+        <div class="flex-1 min-h-0 overflow-y-auto -mr-2 pr-2">
+          {{if .Queue}}
+          <ol class="space-y-1.5">
+            {{range $i, $t := .Queue}}
+            <li class="group flex items-center gap-2 text-sm bg-neutral-950/40 hover:bg-neutral-800/40 rounded-lg px-3 py-2">
+              <span class="text-neutral-600 text-xs w-5 text-right">{{add $i 1}}</span>
+              <span class="flex-1 truncate">{{displayTitle $t.Title $t.Artist}}</span>
+              <form method="post" action="/admin/queue/remove">
+                <input type="hidden" name="idx" value="{{$i}}">
+                <button class="opacity-0 group-hover:opacity-100 text-neutral-500 hover:text-red-400 text-xs transition" title="Remove">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-4 h-4"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+                </button>
+              </form>
+            </li>
+            {{end}}
+          </ol>
+          {{else}}
+          <p class="text-sm text-neutral-500 italic">Empty — shuffle picks tracks automatically</p>
           {{end}}
-        </ol>
-        {{else}}
-        <p class="text-sm text-neutral-500 italic">Empty — shuffle picks tracks automatically</p>
-        {{end}}
+        </div>
       </section>
 
-      <section class="bg-neutral-900/60 backdrop-blur border border-neutral-800 rounded-2xl p-5">
+      <section class="bg-neutral-900/60 backdrop-blur border border-neutral-800 rounded-2xl p-5 flex-shrink-0">
         <h3 class="font-semibold mb-3">Upload</h3>
         <form method="post" action="/admin/files/upload" enctype="multipart/form-data" class="space-y-3" id="upload-form">
           <label class="block">
             <input id="file-pick" type="file" name="file" required accept=".mp3,.wav,.flac,.ogg,.oga,.m4a,.aac" class="hidden">
-            <div id="file-drop" class="cursor-pointer border-2 border-dashed border-neutral-700 hover:border-red-600 rounded-xl p-6 text-center transition">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="w-8 h-8 mx-auto mb-2 text-neutral-500"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5-5 5 5M12 5v12"/></svg>
+            <div id="file-drop" class="cursor-pointer border-2 border-dashed border-neutral-700 hover:border-red-600 rounded-xl p-4 text-center transition">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="w-7 h-7 mx-auto mb-1 text-neutral-500"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5-5 5 5M12 5v12"/></svg>
               <p class="text-sm text-neutral-400" id="file-label">Click or drop an audio file</p>
-              <p class="text-xs text-neutral-600 mt-1">mp3, wav, flac, ogg, m4a, aac</p>
+              <p class="text-xs text-neutral-600 mt-0.5">mp3, wav, flac, ogg, m4a, aac</p>
             </div>
           </label>
           <button type="submit" class="w-full bg-red-700 hover:bg-red-600 text-white px-3 py-2 rounded-lg text-sm font-medium transition shadow-lg shadow-red-900/30">Upload</button>
         </form>
+        <p class="text-center mt-3 pt-3 border-t border-neutral-800 text-xs text-neutral-600">
+          StationCast · <a href="https://github.com/rursache/StationCast" class="hover:text-neutral-400">github.com/rursache/StationCast</a>
+        </p>
       </section>
 
     </div>
 
     <!-- Right column: Library -->
-    <section id="library-section" class="lg:col-span-2 bg-neutral-900/60 backdrop-blur border border-neutral-800 rounded-2xl p-5 flex flex-col" style="max-height: calc(100vh - 260px); min-height: 400px;">
+    <section id="library-section" class="lg:col-span-2 bg-neutral-900/60 backdrop-blur border border-neutral-800 rounded-2xl p-5 flex flex-col min-h-0">
       <div class="flex items-center justify-between gap-3 mb-3">
         <h3 class="font-semibold">Library <span id="lib-count" class="text-neutral-500 font-normal">({{len .Tracks}})</span></h3>
         <div class="flex items-center gap-2">
@@ -196,9 +201,6 @@
     </section>
   </div>
 
-  <footer class="text-center mt-8 text-xs text-neutral-600">
-    StationCast · <a href="https://github.com/rursache/StationCast" class="hover:text-neutral-400">github.com/rursache/StationCast</a>
-  </footer>
 </div>
 
 <audio id="local-audio" preload="none" crossorigin="anonymous"></audio>

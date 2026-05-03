@@ -138,10 +138,14 @@ func safeRedirect(req *http.Request, via []*http.Request) error {
 	return nil
 }
 
-// FetchMissingArt walks the library, looks up album art on iTunes for tracks
-// that have no embedded art and have artist + album metadata, downloads the
-// image into data/art/<id>.jpg, and marks the track row so it is not retried.
-// Same album art is reused across all tracks of the same artist+album.
+// FetchMissingArt walks the library and queries iTunes for album art on every
+// track that has artist + album metadata and has not been queried yet. When
+// iTunes returns artwork it is downloaded into data/art/<id>.jpg, overwriting
+// any embedded art that was extracted during scan; this gives iTunes priority
+// when STATIONCAST_ITUNES_ART is enabled. When iTunes returns nothing the
+// embedded art (if any) is left in place, otherwise the track has no art and
+// the UI shows the placeholder. Same album art is reused across all tracks of
+// the same artist+album. Each track is attempted at most once (`art_tried`)
 func (l *Library) FetchMissingArt(ctx context.Context) {
 	if !l.cfg.ITunesArt {
 		return
@@ -152,7 +156,7 @@ func (l *Library) FetchMissingArt(ctx context.Context) {
 	}
 
 	rows, err := l.db.Query(`SELECT id, artist, album FROM tracks
-		WHERE has_art = 0 AND art_tried = 0 AND artist <> '' AND album <> ''`)
+		WHERE art_tried = 0 AND artist <> '' AND album <> ''`)
 	if err != nil {
 		slog.Warn("itunes: query", "err", err)
 		return
