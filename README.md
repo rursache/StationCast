@@ -127,7 +127,7 @@ The public web UI at `/` auto-picks HLS on iOS Safari and the direct MP3 stream 
 | `STATIONCAST_ADDR` | `:8000` | Listen address |
 | `STATIONCAST_PUBLIC_URL` | `` (request host) | External base URL used in PLS/M3U files |
 | `STATIONCAST_BITRATE` | `128` | MP3 output bitrate, kbps |
-| `STATIONCAST_STATION_NAME` | `StationCast` | Shown in ICY headers and the public UI |
+| `STATIONCAST_STATION_NAME` | `StationCast` | Shown in ICY headers, the public UI, and as the MediaSession fallback when a track has no album tag |
 | `STATIONCAST_STATION_GENRE` | `Various` | ICY genre header |
 | `STATIONCAST_LOUDNORM` | `false` | Apply per-track ffmpeg `loudnorm` so volume does not jump between tracks. Dynamic real-time analysis of the decoded PCM, targets -16 LUFS / -1.5 dBTP |
 | `STATIONCAST_REPLAYGAIN` | `false` | Apply ReplayGain track offsets from ID3 tags before loudnorm. Pairs with files tagged by `rsgain easy` (or similar). Tracks without RG tags pass through unchanged. Best combined with `STATIONCAST_LOUDNORM=true` so loudnorm catches the rest |

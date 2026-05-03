@@ -64,7 +64,7 @@
           </button>
           <div id="local-vol-wrap" class="hidden items-center gap-2 bg-neutral-800/60 border border-neutral-700 rounded-lg px-3 py-2">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-3.5 h-3.5 text-neutral-400"><path stroke-linecap="round" stroke-linejoin="round" d="M5 9v6h4l5 5V4L9 9H5z"/></svg>
-            <input id="local-vol" type="range" min="0" max="100" value="80" class="w-24">
+            <input id="local-vol" type="range" min="0" max="100" value="100" class="w-24">
           </div>
           <form method="post" action="/admin/skip">
             <button class="inline-flex items-center gap-2 bg-white text-neutral-900 hover:bg-neutral-200 px-4 py-2 rounded-lg font-medium text-sm transition">
@@ -147,12 +147,11 @@
         </div>
       </div>
       <div class="flex-1 overflow-y-auto -mx-2">
-        <table class="w-full text-sm" id="lib-table">
+        <table class="w-full table-fixed text-sm" id="lib-table">
           <thead class="sticky top-0 bg-neutral-900/95 backdrop-blur text-left text-neutral-500 text-[11px] uppercase tracking-wider">
             <tr>
               <th class="font-medium py-2 px-2">Track</th>
-              <th class="font-medium py-2 px-2 hidden md:table-cell">Album</th>
-              <th class="font-medium py-2 px-2 text-right">Actions</th>
+              <th class="font-medium py-2 px-2 text-right w-[180px]">Actions</th>
             </tr>
           </thead>
           <tbody id="lib-tbody">
@@ -163,13 +162,13 @@
                   <div class="w-8 h-8 rounded bg-neutral-800 flex-shrink-0 flex items-center justify-center overflow-hidden">
                     {{if .HasArt}}<img src="/art/{{.ID}}" class="w-full h-full object-cover">{{else}}<span class="text-neutral-600">♪</span>{{end}}
                   </div>
-                  <div class="min-w-0">
+                  <div class="min-w-0 flex-1">
                     <div class="truncate">{{if .Title}}{{.Title}}{{else}}<span class="text-neutral-500">untitled</span>{{end}}</div>
                     <div class="text-xs text-neutral-500 truncate">{{.Artist}}</div>
+                    {{if .Album}}<div class="text-xs text-neutral-600 truncate">{{.Album}}</div>{{end}}
                   </div>
                 </div>
               </td>
-              <td class="py-2 px-2 align-middle text-neutral-400 hidden md:table-cell truncate">{{.Album}}</td>
               <td class="py-2 px-2 align-middle text-right whitespace-nowrap">
                 <form method="post" action="/admin/queue" class="inline">
                   <input type="hidden" name="id" value="{{.ID}}">
@@ -187,7 +186,7 @@
               </td>
             </tr>
             {{else}}
-            <tr id="lib-empty"><td colspan="3" class="py-12 text-center text-neutral-500">
+            <tr id="lib-empty"><td colspan="2" class="py-12 text-center text-neutral-500">
               No tracks. Upload one or drop files into the music directory.
             </td></tr>
             {{end}}
@@ -223,8 +222,16 @@
         ? '/hls.m3u8' : '/stream';
     }
     setSrc();
-    audio.volume = (parseInt(vol.value, 10) || 80) / 100;
-    vol.addEventListener('input', () => { audio.volume = vol.value / 100; });
+    const VOL_KEY = 'stationcast.volume';
+    const savedVol = parseInt(localStorage.getItem(VOL_KEY), 10);
+    if (Number.isFinite(savedVol) && savedVol >= 0 && savedVol <= 100) {
+      vol.value = String(savedVol);
+    }
+    audio.volume = (parseInt(vol.value, 10) || 100) / 100;
+    vol.addEventListener('input', () => {
+      audio.volume = vol.value / 100;
+      try { localStorage.setItem(VOL_KEY, vol.value); } catch {}
+    });
 
     function setPlaying(p) {
       if (p) {
@@ -338,7 +345,7 @@
       if (count) count.textContent = `(${tracks.length})`;
       if (!tbody) return;
       if (tracks.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="3" class="py-12 text-center text-neutral-500">No tracks. Upload one or drop files into the music directory.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="2" class="py-12 text-center text-neutral-500">No tracks. Upload one or drop files into the music directory.</td></tr>`;
         return;
       }
       tbody.innerHTML = tracks.map(t => `
@@ -348,13 +355,13 @@
               <div class="w-8 h-8 rounded bg-neutral-800 flex-shrink-0 flex items-center justify-center overflow-hidden">
                 ${t.has_art ? `<img src="/art/${t.id}" class="w-full h-full object-cover">` : `<span class="text-neutral-600">♪</span>`}
               </div>
-              <div class="min-w-0">
+              <div class="min-w-0 flex-1">
                 <div class="truncate">${escapeHTML(t.title) || '<span class="text-neutral-500">untitled</span>'}</div>
                 <div class="text-xs text-neutral-500 truncate">${escapeHTML(t.artist)}</div>
+                ${t.album ? `<div class="text-xs text-neutral-600 truncate">${escapeHTML(t.album)}</div>` : ''}
               </div>
             </div>
           </td>
-          <td class="py-2 px-2 align-middle text-neutral-400 hidden md:table-cell truncate">${escapeHTML(t.album)}</td>
           <td class="py-2 px-2 align-middle text-right whitespace-nowrap">
             <form method="post" action="/admin/queue" class="inline">
               <input type="hidden" name="id" value="${t.id}">

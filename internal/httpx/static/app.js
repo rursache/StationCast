@@ -25,8 +25,16 @@
   }
   setSource();
 
-  player.volume = (parseInt(vol.value, 10) || 80) / 100;
-  vol.addEventListener('input', () => { player.volume = vol.value / 100; });
+  const VOL_KEY = 'stationcast.volume';
+  const savedVol = parseInt(localStorage.getItem(VOL_KEY), 10);
+  if (Number.isFinite(savedVol) && savedVol >= 0 && savedVol <= 100) {
+    vol.value = String(savedVol);
+  }
+  player.volume = (parseInt(vol.value, 10) || 100) / 100;
+  vol.addEventListener('input', () => {
+    player.volume = vol.value / 100;
+    try { localStorage.setItem(VOL_KEY, vol.value); } catch {}
+  });
 
   function setPlayState(playing) {
     if (playing) {
