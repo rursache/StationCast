@@ -112,7 +112,11 @@ func (s *Server) handleNowPlayingSSE(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tick := time.NewTicker(2 * time.Second)
+	// 500ms tick keeps the track-change detection latency under half a
+	// second so the admin progress label and the public player react quickly.
+	// Each non-change tick emits a 14-byte keepalive, ~28 B/s per listener,
+	// well below any meaningful threshold
+	tick := time.NewTicker(500 * time.Millisecond)
 	defer tick.Stop()
 	for {
 		select {

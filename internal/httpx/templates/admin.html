@@ -370,6 +370,15 @@
     return `${m}:${r.toString().padStart(2, '0')}`;
   }
 
+  // Approximate seconds between server-emit and listener-audible position.
+  // Encoder buffer + network jitter buffer (~1-2s) + browser <audio> jitter
+  // buffer (~1.5-3s) stack into a ~3-5s lag for typical Chrome listeners on
+  // a direct MP3 stream. Subtracting it makes the displayed elapsed line up
+  // with what the in-browser monitor actually plays. Listeners on clients
+  // with much bigger buffers (eg some hardware radios) will still see the
+  // label slightly ahead of their audio
+  const PROGRESS_OFFSET_SEC = 5;
+
   function updateProgress() {
     const sep = document.getElementById('np-progress-sep');
     const el = document.getElementById('np-progress');
@@ -379,9 +388,10 @@
       sep.classList.add('hidden');
       return;
     }
-    const elapsed = Math.max(0, Math.floor(Date.now() / 1000 - lastNP.started_at));
+    const rawElapsed = Math.max(0, Math.floor(Date.now() / 1000 - lastNP.started_at));
+    const adjusted = Math.max(0, rawElapsed - PROGRESS_OFFSET_SEC);
     const totalSec = (lastNP.duration_ms || 0) / 1000;
-    el.textContent = totalSec > 0 ? `${fmtMMSS(elapsed)} / ${fmtMMSS(totalSec)}` : fmtMMSS(elapsed);
+    el.textContent = totalSec > 0 ? `${fmtMMSS(adjusted)} / ${fmtMMSS(totalSec)}` : fmtMMSS(adjusted);
     sep.classList.remove('hidden');
   }
 
