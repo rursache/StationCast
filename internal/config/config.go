@@ -19,6 +19,7 @@ type Config struct {
 	StationName      string
 	StationGenre     string
 	LoudNorm         bool
+	ReplayGain       bool
 	ITunesArt        bool
 	GainDB           int
 	MaxListeners     int
@@ -36,6 +37,7 @@ func Load() (*Config, error) {
 		StationName:      env("STATIONCAST_STATION_NAME", "StationCast"),
 		StationGenre:     env("STATIONCAST_STATION_GENRE", "Various"),
 		LoudNorm:         envBool("STATIONCAST_LOUDNORM", false),
+		ReplayGain:       envBool("STATIONCAST_REPLAYGAIN", false),
 		ITunesArt:        envBool("STATIONCAST_ITUNES_ART", true),
 		RecaptchaSiteKey: os.Getenv("STATIONCAST_RECAPTCHA_SITE_KEY"),
 		RecaptchaSecret:  os.Getenv("STATIONCAST_RECAPTCHA_SECRET_KEY"),

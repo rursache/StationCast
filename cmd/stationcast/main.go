@@ -33,6 +33,7 @@ func main() {
 		"addr", cfg.Addr,
 		"bitrate", cfg.Bitrate,
 		"loudnorm", cfg.LoudNorm,
+		"replaygain", cfg.ReplayGain,
 		"gain_db", cfg.GainDB,
 		"max_listeners", cfg.MaxListeners,
 		"recaptcha", cfg.RecaptchaSiteKey != "",

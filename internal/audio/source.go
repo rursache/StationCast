@@ -77,7 +77,7 @@ func (s *pcmSource) startDecoder(t *playlist.Track) (*exec.Cmd, io.ReadCloser, e
 		"-hide_banner", "-loglevel", "warning",
 		"-i", "file:" + t.Path,
 	}
-	if filter := buildAudioFilter(s.eng.cfg.LoudNorm, s.eng.cfg.GainDB); filter != "" {
+	if filter := buildAudioFilter(s.eng.cfg.ReplayGain, s.eng.cfg.LoudNorm, s.eng.cfg.GainDB); filter != "" {
 		args = append(args, "-af", filter)
 	}
 	args = append(args,
@@ -108,10 +108,15 @@ func fillSilence(p []byte) int {
 }
 
 // buildAudioFilter assembles the ffmpeg -af filter chain.
-// Order matters: loudnorm first (so a loud-normalized signal sits at the target
-// LUFS), then volume so the user-requested boost is applied on top.
-func buildAudioFilter(loudnorm bool, gainDB int) string {
+// Order matters: ReplayGain first (per-track static offset from ID3 tags
+// brings every track to a consistent reference), then loudnorm (catches the
+// rest with dynamic limiting and handles tracks without RG tags), then the
+// user gain boost on top
+func buildAudioFilter(replaygain, loudnorm bool, gainDB int) string {
 	parts := []string{}
+	if replaygain {
+		parts = append(parts, "volume=replaygain=track")
+	}
 	if loudnorm {
 		parts = append(parts, "loudnorm=I=-16:LRA=11:TP=-1.5")
 	}

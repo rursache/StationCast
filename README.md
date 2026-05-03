@@ -71,7 +71,8 @@ STATIONCAST_DATA_DIR=./data \
 | `STATIONCAST_BITRATE` | `128` | MP3 output bitrate, kbps |
 | `STATIONCAST_STATION_NAME` | `StationCast` | Shown in ICY headers, public UI, MediaSession |
 | `STATIONCAST_STATION_GENRE` | `Various` | ICY genre header |
-| `STATIONCAST_LOUDNORM` | `false` | Apply per-track ffmpeg `loudnorm` so volume does not jump between tracks |
+| `STATIONCAST_LOUDNORM` | `false` | Apply per-track ffmpeg `loudnorm` so volume does not jump between tracks. Dynamic real-time analysis of the decoded PCM, targets -16 LUFS / -1.5 dBTP |
+| `STATIONCAST_REPLAYGAIN` | `false` | Apply ReplayGain track offsets from ID3 tags before loudnorm. Pairs with files tagged by `rsgain easy` (or similar). Tracks without RG tags pass through unchanged. Best combined with `STATIONCAST_LOUDNORM=true` so loudnorm catches the rest |
 | `STATIONCAST_GAIN_DB` | `0` | Source volume boost in dB (range -20 to +20). Applied after loudnorm so it stacks. Aggressive positive values combined with loudnorm can clip the output (loudnorm targets a true-peak of -1.5 dBTP, so anything above +1 dB will start to push peaks above 0 dB) |
 | `STATIONCAST_ITUNES_ART` | `true` | Fetch missing album art from the iTunes Search API when artist + album tags exist |
 | `STATIONCAST_MAX_LISTENERS` | `256` | Hard cap on concurrent `/stream` connections. Excess listeners get HTTP 503. Set to `0` for unlimited (not recommended) |
