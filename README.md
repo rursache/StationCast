@@ -10,24 +10,17 @@ A small, self-contained internet radio server in Go. Drop audio files into a dir
 
 ## Features
 
-- **Filesystem-first library**: drop `mp3`, `wav`, `flac`, `ogg`, `oga`, `m4a`, or `aac` files into the music directory and they appear live via `fsnotify`. Rename, move, or delete on disk and the library follows. No import step, no rescan button
-- **True broadcast**: every listener receives identical bytes at the same time, with gapless encoding across track boundaries
-- **Stream in any format a client supports**:
-  - `GET /stream` (alias `/stream.mp3`) - direct MP3 with optional ICY metadata, for browsers, VLC, foobar2000, smart speakers, Sonos
-  - `GET /stream.pls` - PLS playlist file, the most common format for hardware internet radios
-  - `GET /stream.m3u` - extended M3U pointing at `/stream`
-  - `GET /hls.m3u8` - HLS playlist with rolling TS segments, for iOS Safari and Apple TV
-- **Audio chain controls** for consistent perceived volume across a mixed library:
-  - `STATIONCAST_REPLAYGAIN` reads precomputed ReplayGain ID3 tags (eg from `rsgain easy`) and applies them per track
-  - `STATIONCAST_LOUDNORM` runs ffmpeg's EBU R128 loudness normalization at -16 LUFS / -1.5 dBTP true-peak
-  - `STATIONCAST_GAIN_DB` applies a final dB boost on top
-- **Per-track metadata to every client**: ID3 tag title / artist / album are extracted on file scan and propagated live to listeners via ICY `StreamTitle` on `/stream`, the `/now-playing` JSON endpoint, the `/now-playing/sse` Server-Sent Events stream, and `navigator.mediaSession` on the public player (lock-screen now-playing, hardware media keys, OS-level controls)
-- **Album art with iTunes fallback**: when `STATIONCAST_ITUNES_ART=true` (default), iTunes Search API artwork is preferred per `(artist, album)` pair, with embedded ID3 art used as a fallback when iTunes has no result, and a placeholder when neither is available. All artwork is cached on disk under `data/art/`
-- **Web admin**: live now-playing, shuffle / sequential / loop modes, manual queue, upload / rename / delete files, listener count
-- **Public player**: live-updating now-playing over Server-Sent Events, one-click copy of every stream URL, auto-selects HLS on iOS Safari and direct MP3 elsewhere
-- **Security**: optional reCAPTCHA v3 on the login form (action match + score >= 0.5), `STATIONCAST_MAX_LISTENERS` hard cap that returns HTTP 503 to excess `/stream` connections
-- **Container-ready**: single binary, multi-arch (amd64/arm64) Docker image with `PUID`/`PGID` support for NAS bind mounts, only `ffmpeg` as a runtime dependency
-- **Resilient broadcast**: slow listeners are dropped before they back up the encoder so per-stream lag never affects the rest; pause injects silence so listeners stay connected
+- **Filesystem-first library**: drop `mp3`, `wav`, `flac`, `ogg`, `oga`, `m4a`, or `aac` files in and they appear live via `fsnotify`; rename, move or delete on disk and the library follows
+- **True broadcast**: every listener receives identical bytes, gapless across track boundaries
+- **Stream in any format a client supports**: direct MP3 with ICY, PLS, M3U, and HLS - see [Listening](#listening)
+- **Audio chain controls** for consistent perceived volume: ReplayGain, EBU R128 loudness normalization, and a final dB boost - see [Environment variables](#environment-variables)
+- **Live metadata to every client**: ID3 title / artist / album propagated via ICY `StreamTitle`, `/now-playing` JSON, SSE, and `navigator.mediaSession`
+- **Album art with iTunes fallback**: iTunes Search API preferred per `(artist, album)`, embedded ID3 art as fallback, placeholder otherwise. Cached on disk
+- **Web admin**: shuffle / sequential / loop modes, manual queue, upload / rename / delete, live now-playing and listener count
+- **Public player**: live now-playing over SSE, one-click copy of every stream URL, auto-picks HLS on iOS Safari
+- **Security**: optional reCAPTCHA v3 on the login form, `STATIONCAST_MAX_LISTENERS` hard cap on `/stream` connections
+- **Container-ready**: multi-arch (amd64/arm64) image with `PUID`/`PGID`, only `ffmpeg` as a runtime dep
+- **Resilient broadcast**: slow listeners dropped before they back up the encoder; pause injects silence so listeners stay connected
 
 ## Quick start
 
