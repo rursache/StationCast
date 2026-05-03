@@ -7,7 +7,9 @@ import (
 	"io/fs"
 	"log/slog"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -359,6 +361,46 @@ func nullStr(s string) any {
 		return nil
 	}
 	return s
+}
+
+// EnsureDuration fills in the track's DurationMS via ffprobe when missing,
+// then persists it so subsequent loads have it cached. No-op when the
+// track already has a duration. Designed to be called from MarkPlaying so
+// existing libraries scanned before duration extraction was added pick up
+// values lazily as tracks play
+func (l *Library) EnsureDuration(t *Track) {
+	if t == nil || t.DurationMS > 0 {
+		return
+	}
+	dur := probeDurationMS(t.Path)
+	if dur <= 0 {
+		return
+	}
+	_, _ = l.db.Exec(`UPDATE tracks SET duration_ms = ? WHERE id = ?`, dur, t.ID)
+	l.mu.Lock()
+	if existing, ok := l.byID[t.ID]; ok {
+		existing.DurationMS = dur
+	}
+	l.mu.Unlock()
+}
+
+func probeDurationMS(path string) int64 {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "ffprobe", "-v", "error",
+		"-show_entries", "format=duration",
+		"-of", "default=noprint_wrappers=1:nokey=1",
+		"file:"+path)
+	out, err := cmd.Output()
+	if err != nil {
+		return 0
+	}
+	s := strings.TrimSpace(string(out))
+	f, err := strconv.ParseFloat(s, 64)
+	if err != nil || f <= 0 {
+		return 0
+	}
+	return int64(f * 1000)
 }
 
 func boolInt(b bool) int {

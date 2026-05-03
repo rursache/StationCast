@@ -38,13 +38,16 @@
         {{end}}
       </div>
       <div class="flex-1 min-w-0">
-        <div class="flex items-center gap-2 mb-1">
+        <div class="flex items-center gap-2 mb-1 text-[11px] uppercase tracking-widest">
           <span class="relative flex h-2 w-2">
             <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-500 opacity-75"></span>
             <span class="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
           </span>
-          <span class="text-[11px] uppercase tracking-widest text-red-400 font-medium">On air</span>
-          <span class="text-[11px] uppercase tracking-widest text-neutral-600 ml-2">Now playing</span>
+          <span class="text-red-400 font-medium">On air</span>
+          <span class="text-neutral-700">·</span>
+          <span class="text-neutral-600">Now playing</span>
+          <span id="np-progress-sep" class="text-neutral-700 hidden">·</span>
+          <span id="np-progress" class="text-neutral-500 font-mono normal-case tracking-normal"></span>
         </div>
         <h2 id="np-title" class="text-lg md:text-xl font-semibold truncate">
           {{if .Current}}{{.Current.Title}}{{else}}Idle{{end}}
@@ -66,7 +69,7 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-3.5 h-3.5 text-neutral-400"><path stroke-linecap="round" stroke-linejoin="round" d="M5 9v6h4l5 5V4L9 9H5z"/></svg>
             <input id="local-vol" type="range" min="0" max="100" value="100" class="w-24">
           </div>
-          <form method="post" action="/admin/skip">
+          <form id="skip-form" method="post" action="/admin/skip">
             <button class="inline-flex items-center gap-2 bg-white text-neutral-900 hover:bg-neutral-200 px-4 py-2 rounded-lg font-medium text-sm transition">
               <svg viewBox="0 0 24 24" fill="currentColor" class="w-4 h-4"><path d="M5 4l10 8-10 8V4zm12 0h2v16h-2V4z"/></svg>
               Skip
@@ -95,13 +98,12 @@
         </div>
 
         <div id="qh-pane-queue" class="flex-1 min-h-0 overflow-y-auto -mr-2 pr-2">
-          {{if .Queue}}
-          <ol class="space-y-1.5">
+          <ol id="qh-queue-list" class="space-y-1.5">
             {{range $i, $t := .Queue}}
-            <li class="group flex items-center gap-2 text-sm bg-neutral-950/40 hover:bg-neutral-800/40 rounded-lg px-3 py-2">
-              <span class="text-neutral-600 text-xs w-5 text-right">{{add $i 1}}</span>
-              <span class="flex-1 truncate">{{displayTitle $t.Title $t.Artist}}</span>
-              <form method="post" action="/admin/queue/remove">
+            <li class="group flex items-center gap-2 text-sm bg-neutral-950/40 hover:bg-neutral-800/40 rounded-lg px-3 py-2" data-idx="{{$i}}">
+              <span class="text-neutral-600 text-xs w-5 text-right flex-shrink-0">{{add $i 1}}</span>
+              <div class="flex-1 min-w-0 overflow-x-auto whitespace-nowrap">{{displayTitle $t.Title $t.Artist}}</div>
+              <form method="post" action="/admin/queue/remove" class="flex-shrink-0">
                 <input type="hidden" name="idx" value="{{$i}}">
                 <button class="opacity-0 group-hover:opacity-100 text-neutral-500 hover:text-red-400 text-xs transition" title="Remove">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-4 h-4"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
@@ -110,24 +112,19 @@
             </li>
             {{end}}
           </ol>
-          {{else}}
-          <p class="text-sm text-neutral-500 italic">Empty - shuffle picks tracks automatically</p>
-          {{end}}
+          <p id="qh-queue-empty" class="text-sm text-neutral-500 italic{{if .Queue}} hidden{{end}}">Empty - shuffle picks tracks automatically</p>
         </div>
 
         <div id="qh-pane-history" class="hidden flex-1 min-h-0 overflow-y-auto -mr-2 pr-2">
-          {{if .History}}
-          <ol class="space-y-1.5">
+          <ol id="qh-history-list" class="space-y-1.5">
             {{range $i, $t := .History}}
             <li class="flex items-center gap-2 text-sm bg-neutral-950/40 rounded-lg px-3 py-2">
-              <span class="text-neutral-600 text-xs w-5 text-right">{{add $i 1}}</span>
-              <span class="flex-1 truncate">{{displayTitle $t.Title $t.Artist}}</span>
+              <span class="text-neutral-600 text-xs w-5 text-right flex-shrink-0">{{add $i 1}}</span>
+              <div class="flex-1 min-w-0 overflow-x-auto whitespace-nowrap">{{displayTitle $t.Title $t.Artist}}</div>
             </li>
             {{end}}
           </ol>
-          {{else}}
-          <p class="text-sm text-neutral-500 italic">No tracks have played yet</p>
-          {{end}}
+          <p id="qh-history-empty" class="text-sm text-neutral-500 italic{{if .History}} hidden{{end}}">No tracks have played yet</p>
         </div>
       </section>
 
@@ -329,40 +326,127 @@
   }
   bindRowActions();
 
-  // Live refresh: now-playing every 5s, library every 15s + on focus
+  // Live refresh: now-playing via SSE, queue / history on each SSE event,
+  // library on a 15s poll + on focus
   function escapeHTML(s) { return (s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
-  async function refreshNowPlaying() {
-    try {
-      const r = await fetch('/now-playing'); if (!r.ok) return;
-      const d = await r.json();
-      const t = document.getElementById('np-title');
-      const a = document.getElementById('np-artist');
-      const n = document.getElementById('np-next');
-      const l = document.getElementById('np-listeners');
-      if (t) t.textContent = d.title || 'Idle';
-      if (a) {
-        let s = d.artist || '';
-        if (d.album) s = (s ? s + ' · ' : '') + d.album;
-        a.textContent = s || 'Waiting for tracks';
-      }
-      if (n) n.textContent = 'Up next: ' + (d.next_title ? (d.next_artist ? d.next_artist + ' - ' : '') + d.next_title : '—');
-      if (l) l.textContent = d.listeners || 0;
-      const art = document.getElementById('np-art');
-      if (art) {
-        const fallback = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="w-12 h-12 text-neutral-600"><path stroke-linecap="round" stroke-linejoin="round" d="M9 19V5l12-2v14"/><circle cx="6" cy="19" r="3" stroke-linecap="round" stroke-linejoin="round"/><circle cx="18" cy="16" r="3" stroke-linecap="round" stroke-linejoin="round"/></svg>';
-        if (d.has_art && d.art_url) {
-          const img = art.querySelector('img');
-          if (img && img.getAttribute('src') === d.art_url) {
-            // already showing this art, leave it alone
-          } else {
-            art.innerHTML = `<img src="${escapeHTML(d.art_url)}" alt="" class="w-full h-full object-cover">`;
-          }
-        } else if (!art.querySelector('svg')) {
-          art.innerHTML = fallback;
+  let lastNP = null;
+
+  function applyNowPlaying(d) {
+    lastNP = d;
+    const t = document.getElementById('np-title');
+    const a = document.getElementById('np-artist');
+    const n = document.getElementById('np-next');
+    const l = document.getElementById('np-listeners');
+    if (t) t.textContent = d.title || 'Idle';
+    if (a) {
+      let s = d.artist || '';
+      if (d.album) s = (s ? s + ' · ' : '') + d.album;
+      a.textContent = s || 'Waiting for tracks';
+    }
+    if (n) n.textContent = 'Up next: ' + (d.next_title ? (d.next_artist ? d.next_artist + ' - ' : '') + d.next_title : '—');
+    if (l) l.textContent = d.listeners || 0;
+    const art = document.getElementById('np-art');
+    if (art) {
+      const fallback = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="w-12 h-12 text-neutral-600"><path stroke-linecap="round" stroke-linejoin="round" d="M9 19V5l12-2v14"/><circle cx="6" cy="19" r="3" stroke-linecap="round" stroke-linejoin="round"/><circle cx="18" cy="16" r="3" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+      if (d.has_art && d.art_url) {
+        const img = art.querySelector('img');
+        if (img && img.getAttribute('src') === d.art_url) {
+          // already showing this art, leave it alone
+        } else {
+          art.innerHTML = `<img src="${escapeHTML(d.art_url)}" alt="" class="w-full h-full object-cover">`;
         }
+      } else if (!art.querySelector('svg')) {
+        art.innerHTML = fallback;
       }
+    }
+    updateProgress();
+  }
+
+  function fmtMMSS(seconds) {
+    if (!Number.isFinite(seconds) || seconds < 0) seconds = 0;
+    const m = Math.floor(seconds / 60);
+    const r = Math.floor(seconds % 60);
+    return `${m}:${r.toString().padStart(2, '0')}`;
+  }
+
+  function updateProgress() {
+    const sep = document.getElementById('np-progress-sep');
+    const el = document.getElementById('np-progress');
+    if (!el || !sep) return;
+    if (!lastNP || !lastNP.title || !lastNP.started_at) {
+      el.textContent = '';
+      sep.classList.add('hidden');
+      return;
+    }
+    const elapsed = Math.max(0, Math.floor(Date.now() / 1000 - lastNP.started_at));
+    const totalSec = (lastNP.duration_ms || 0) / 1000;
+    el.textContent = totalSec > 0 ? `${fmtMMSS(elapsed)} / ${fmtMMSS(totalSec)}` : fmtMMSS(elapsed);
+    sep.classList.remove('hidden');
+  }
+
+  // Queue / History live re-render. On every now-playing change the manual
+  // queue may have advanced (a queued track became current), and history
+  // gained an entry. Pull fresh state and rebuild both panes
+  async function refreshAdminState() {
+    try {
+      const r = await fetch('/admin/state.json', { credentials: 'same-origin', cache: 'no-store' });
+      if (!r.ok) return;
+      const d = await r.json();
+      renderQueueList(d.queue || []);
+      renderHistoryList(d.history || []);
+      updateQueueHistoryCount();
     } catch {}
+  }
+
+  function renderQueueList(items) {
+    const list = document.getElementById('qh-queue-list');
+    const empty = document.getElementById('qh-queue-empty');
+    if (!list || !empty) return;
+    if (items.length === 0) {
+      list.innerHTML = '';
+      empty.classList.remove('hidden');
+      return;
+    }
+    empty.classList.add('hidden');
+    list.innerHTML = items.map((t, i) => `
+      <li class="group flex items-center gap-2 text-sm bg-neutral-950/40 hover:bg-neutral-800/40 rounded-lg px-3 py-2" data-idx="${i}">
+        <span class="text-neutral-600 text-xs w-5 text-right flex-shrink-0">${i + 1}</span>
+        <div class="flex-1 min-w-0 overflow-x-auto whitespace-nowrap">${escapeHTML(t.display || t.title || '')}</div>
+        <form method="post" action="/admin/queue/remove" class="flex-shrink-0">
+          <input type="hidden" name="idx" value="${i}">
+          <button class="opacity-0 group-hover:opacity-100 text-neutral-500 hover:text-red-400 text-xs transition" title="Remove">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-4 h-4"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+          </button>
+        </form>
+      </li>`).join('');
+  }
+
+  function renderHistoryList(items) {
+    const list = document.getElementById('qh-history-list');
+    const empty = document.getElementById('qh-history-empty');
+    if (!list || !empty) return;
+    if (items.length === 0) {
+      list.innerHTML = '';
+      empty.classList.remove('hidden');
+      return;
+    }
+    empty.classList.add('hidden');
+    list.innerHTML = items.map((t, i) => `
+      <li class="flex items-center gap-2 text-sm bg-neutral-950/40 rounded-lg px-3 py-2">
+        <span class="text-neutral-600 text-xs w-5 text-right flex-shrink-0">${i + 1}</span>
+        <div class="flex-1 min-w-0 overflow-x-auto whitespace-nowrap">${escapeHTML(t.display || t.title || '')}</div>
+      </li>`).join('');
+  }
+
+  function updateQueueHistoryCount() {
+    const count = document.getElementById('qh-count');
+    if (!count) return;
+    const tabQ = document.getElementById('qh-tab-queue');
+    const isQueue = tabQ?.dataset.active !== 'false';
+    const list = document.getElementById(isQueue ? 'qh-queue-list' : 'qh-history-list');
+    const n = list ? list.children.length : 0;
+    count.textContent = `${n} item${n === 1 ? '' : 's'}`;
   }
 
   async function refreshLibrary() {
@@ -457,28 +541,57 @@
     const tabH = document.getElementById('qh-tab-history');
     const paneQ = document.getElementById('qh-pane-queue');
     const paneH = document.getElementById('qh-pane-history');
-    const count = document.getElementById('qh-count');
     if (!tabQ || !tabH || !paneQ || !paneH) return;
-    const queueCount = parseInt(count?.dataset.queueCount || '0', 10) || ({{len .Queue}});
-    const historyCount = ({{len .History}});
     function show(which) {
       const isQ = which === 'queue';
       tabQ.dataset.active = String(isQ);
       tabH.dataset.active = String(!isQ);
       paneQ.classList.toggle('hidden', !isQ);
       paneH.classList.toggle('hidden', isQ);
-      if (count) {
-        const n = isQ ? queueCount : historyCount;
-        count.textContent = `${n} item${n === 1 ? '' : 's'}`;
-      }
+      updateQueueHistoryCount();
     }
     tabQ.addEventListener('click', () => show('queue'));
     tabH.addEventListener('click', () => show('history'));
   })();
 
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) { refreshNowPlaying(); refreshLibrary(); } });
+  // Skip via fetch so the page does not reload (which would interrupt the
+  // admin's local audio monitor). The server emits 204 No Content for
+  // JSON-aware clients. SSE will fire shortly with the next track
+  document.getElementById('skip-form')?.addEventListener('submit', e => {
+    e.preventDefault();
+    fetch('/admin/skip', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Accept': 'application/json' },
+    }).catch(() => {});
+  });
 
-  setInterval(refreshNowPlaying, 5000);
+  // Live now-playing via SSE. The same channel the public page uses, so
+  // header text + art update within ~1s of the actual track change. On each
+  // event also pull fresh queue / history so a queued track that just
+  // became the current one drops out of the queue immediately
+  function connectSSE() {
+    const es = new EventSource('/now-playing/sse');
+    es.onmessage = e => {
+      try {
+        const d = JSON.parse(e.data);
+        applyNowPlaying(d);
+        refreshAdminState();
+      } catch {}
+    };
+    es.onerror = () => {
+      es.close();
+      setTimeout(connectSSE, 3000);
+    };
+  }
+  // Initial render uses fetch so we have data even before the first SSE tick
+  fetch('/now-playing').then(r => r.json()).then(applyNowPlaying).catch(() => {});
+  refreshAdminState();
+  connectSSE();
+
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) { refreshLibrary(); refreshAdminState(); } });
+
+  setInterval(updateProgress, 1000);
   setInterval(refreshLibrary, 15000);
 </script>
 </body>

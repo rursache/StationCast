@@ -18,6 +18,8 @@ type nowPlaying struct {
 	Album       string `json:"album"`
 	HasArt      bool   `json:"has_art"`
 	ArtURL      string `json:"art_url,omitempty"`
+	DurationMS  int64  `json:"duration_ms,omitempty"`
+	StartedAt   int64  `json:"started_at,omitempty"`
 	NextTitle   string `json:"next_title,omitempty"`
 	NextArtist  string `json:"next_artist,omitempty"`
 	Listeners   int    `json:"listeners"`
@@ -34,6 +36,8 @@ func (s *Server) currentNowPlaying() nowPlaying {
 		np.Artist = t.DisplayArtist(s.cfg.StationName)
 		np.Album = t.Album
 		np.HasArt = t.HasArt
+		np.DurationMS = t.DurationMS
+		np.StartedAt = s.sched.CurrentStartedAt()
 		if t.HasArt {
 			np.ArtURL = "/art/" + strconv.FormatInt(t.ID, 10)
 		}

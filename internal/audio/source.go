@@ -54,6 +54,9 @@ func (s *pcmSource) Read(p []byte) (int, error) {
 			// gets corrected on the next play. RefreshArt itself throttles
 			// per song, so rapid Skip events do not burst the API
 			go s.eng.lib.RefreshArt(s.ctx, t)
+			// Lazy-fill the track's duration via ffprobe if missing so the
+			// admin progress label has a total to render against
+			go s.eng.lib.EnsureDuration(t)
 		}
 		n, err := s.curOut.Read(p)
 		if n > 0 {

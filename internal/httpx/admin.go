@@ -110,11 +110,51 @@ func (s *Server) handleAdminHome(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleSkip(w http.ResponseWriter, r *http.Request) {
 	s.engine.Skip()
-	if isHTMX(r) {
+	if isHTMX(r) || acceptsJSON(r) {
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
 	http.Redirect(w, r, "/admin/", http.StatusSeeOther)
+}
+
+type adminStateEntry struct {
+	ID      int64  `json:"id"`
+	Title   string `json:"title"`
+	Artist  string `json:"artist"`
+	Album   string `json:"album"`
+	HasArt  bool   `json:"has_art"`
+	Display string `json:"display"`
+}
+
+type adminStateResponse struct {
+	Queue   []adminStateEntry `json:"queue"`
+	History []adminStateEntry `json:"history"`
+}
+
+func (s *Server) handleAdminStateJSON(w http.ResponseWriter, r *http.Request) {
+	stationName := s.cfg.StationName
+	out := adminStateResponse{
+		Queue:   adminEntriesFromTracks(s.sched.Queue(), stationName),
+		History: adminEntriesFromTracks(s.sched.History(), stationName),
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+	_ = json.NewEncoder(w).Encode(out)
+}
+
+func adminEntriesFromTracks(tracks []*playlist.Track, stationName string) []adminStateEntry {
+	out := make([]adminStateEntry, 0, len(tracks))
+	for _, t := range tracks {
+		out = append(out, adminStateEntry{
+			ID:      t.ID,
+			Title:   t.Title,
+			Artist:  t.Artist,
+			Album:   t.Album,
+			HasArt:  t.HasArt,
+			Display: t.DisplayLine(stationName),
+		})
+	}
+	return out
 }
 
 func (s *Server) handleSetMode(w http.ResponseWriter, r *http.Request) {
@@ -235,4 +275,11 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 
 func isHTMX(r *http.Request) bool {
 	return r.Header.Get("HX-Request") == "true"
+}
+
+// acceptsJSON returns true when the client sent an explicit JSON-only Accept
+// header (eg via fetch() with Accept: application/json). Plain browser form
+// submits do not match
+func acceptsJSON(r *http.Request) bool {
+	return strings.Contains(r.Header.Get("Accept"), "application/json")
 }

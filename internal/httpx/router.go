@@ -74,6 +74,7 @@ func NewRouter(cfg *config.Config, db *storage.DB, lib *playlist.Library, sched 
 			r.Use(s.requireAuth)
 			r.Get("/", s.handleAdminHome)
 			r.Get("/library.json", s.handleLibraryJSON)
+			r.Get("/state.json", s.handleAdminStateJSON)
 			r.With(readTimeout(15 * time.Second)).Post("/skip", s.handleSkip)
 			r.With(readTimeout(15 * time.Second)).Post("/mode", s.handleSetMode)
 			r.With(readTimeout(15 * time.Second)).Post("/queue", s.handleEnqueue)

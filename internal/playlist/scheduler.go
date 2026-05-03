@@ -31,12 +31,13 @@ type Scheduler struct {
 	db  *storage.DB
 	lib *Library
 
-	mu       sync.Mutex
-	mode     Mode
-	current  *Track
-	manual   []int64
-	recent   []int64
-	skipNext bool
+	mu               sync.Mutex
+	mode             Mode
+	current          *Track
+	currentStartedAt int64 // unix seconds when MarkPlaying recorded the current track
+	manual           []int64
+	recent           []int64
+	skipNext         bool
 
 	// Deck shuffle state. The deck is a freshly-shuffled list of track ids
 	// drawn one at a time. When deckPos catches the tail, the deck is
@@ -114,6 +115,14 @@ func (s *Scheduler) Current() *Track {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.current
+}
+
+// CurrentStartedAt returns the unix timestamp (seconds) when MarkPlaying
+// recorded the current track, or 0 when nothing is playing
+func (s *Scheduler) CurrentStartedAt() int64 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.currentStartedAt
 }
 
 func (s *Scheduler) Queue() []*Track {
@@ -313,12 +322,15 @@ func (s *Scheduler) MarkPlaying(t *Track) {
 	if t == nil {
 		s.mu.Lock()
 		s.current = nil
+		s.currentStartedAt = 0
 		s.mu.Unlock()
 		_ = s.db.SetSetting(settingCurrent, "")
 		return
 	}
+	now := time.Now().Unix()
 	s.mu.Lock()
 	s.current = t
+	s.currentStartedAt = now
 	s.recent = append([]int64{t.ID}, s.recent...)
 	if len(s.recent) > historyWindow*2 {
 		s.recent = s.recent[:historyWindow*2]
