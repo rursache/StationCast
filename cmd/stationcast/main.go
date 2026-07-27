@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -55,17 +56,29 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	// Background workers are tracked so shutdown can wait for them. Both
+	// Run loops kill their ffmpeg children on the way out, and returning
+	// from main before that happens orphans those processes
+	var workers sync.WaitGroup
+	spawn := func(fn func(context.Context)) {
+		workers.Add(1)
+		go func() {
+			defer workers.Done()
+			fn(ctx)
+		}()
+	}
+
 	lib := playlist.NewLibrary(cfg, db)
 	if err := lib.InitialScan(ctx); err != nil {
 		logger.Error("library scan", "err", err)
 	}
-	go lib.Watch(ctx)
-	go lib.FetchMissingArt(ctx)
+	spawn(lib.Watch)
+	spawn(lib.FetchMissingArt)
 
 	hub := broadcast.NewHub(cfg.Bitrate)
 	hub.SetMaxListeners(cfg.MaxListeners)
 	hls := broadcast.NewHLSManager(hub, cfg.DataDir)
-	go hls.Run(ctx)
+	spawn(hls.Run)
 
 	sched := playlist.NewScheduler(cfg, db, lib)
 	if err := sched.Restore(); err != nil {
@@ -73,10 +86,10 @@ func main() {
 	}
 
 	engine := audio.NewEngine(cfg, sched, hub, lib)
-	go engine.Run(ctx)
+	spawn(engine.Run)
 
 	router, authSweep := httpx.NewRouter(cfg, db, lib, sched, hub, hls, engine)
-	go authSweep(ctx)
+	spawn(authSweep)
 
 	// Streaming endpoints rely on long-lived writes, so we cannot set a global
 	// WriteTimeout. ReadHeaderTimeout caps slow header attacks; IdleTimeout
@@ -107,5 +120,32 @@ func main() {
 	defer shutdownCancel()
 	_ = srv.Shutdown(shutdownCtx)
 	cancel()
+
+	// Wait before closing the hub: the engine's stdout pump writes into it,
+	// and the Run loops need the chance to kill and reap their ffmpeg
+	// children rather than leaving them orphaned
+	if !waitFor(&workers, workerShutdownTimeout) {
+		logger.Warn("background workers did not stop in time", "timeout", workerShutdownTimeout)
+	}
 	hub.Close()
+}
+
+// workerShutdownTimeout bounds how long shutdown waits for background
+// workers. Longer than the HTTP grace period because the audio engine has to
+// kill and reap ffmpeg subprocesses on the way out
+const workerShutdownTimeout = 10 * time.Second
+
+// waitFor reports whether wg finished within d
+func waitFor(wg *sync.WaitGroup, d time.Duration) bool {
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+		return true
+	case <-time.After(d):
+		return false
+	}
 }
