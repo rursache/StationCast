@@ -136,8 +136,8 @@ func TestWithinRoot(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.path, func(t *testing.T) {
-			if got := withinRoot(root, tc.path); got != tc.want {
-				t.Errorf("withinRoot(%q, %q) = %v, want %v", root, tc.path, got, tc.want)
+			if got := WithinRoot(root, tc.path); got != tc.want {
+				t.Errorf("WithinRoot(%q, %q) = %v, want %v", root, tc.path, got, tc.want)
 			}
 		})
 	}

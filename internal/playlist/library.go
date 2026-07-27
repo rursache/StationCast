@@ -42,10 +42,10 @@ func artPath(dataDir string, id int64) string {
 	return filepath.Join(dataDir, "art", fmt.Sprintf("%d.jpg", id))
 }
 
-// withinRoot reports whether path sits inside root. The separator in the
+// WithinRoot reports whether path sits inside root. The separator in the
 // prefix check matters: a plain HasPrefix(rel, "..") also rejects a sibling
 // entry legitimately named something like "..bonus tracks"
-func withinRoot(root, path string) bool {
+func WithinRoot(root, path string) bool {
 	rel, err := filepath.Rel(root, path)
 	if err != nil {
 		return false
@@ -201,7 +201,7 @@ func (l *Library) upsertFile(path string) error {
 	if li.Mode()&os.ModeSymlink != 0 {
 		return errors.New("symlinks are not allowed in the music directory")
 	}
-	if !withinRoot(l.cfg.MusicDir, path) {
+	if !WithinRoot(l.cfg.MusicDir, path) {
 		return errors.New("path outside music root")
 	}
 	// Lstat only inspects the last component and the check above is textual,
@@ -211,7 +211,7 @@ func (l *Library) upsertFile(path string) error {
 	if err != nil {
 		return err
 	}
-	if !withinRoot(l.root, resolved) {
+	if !WithinRoot(l.root, resolved) {
 		return errors.New("path resolves outside music root")
 	}
 	st, err := os.Stat(path)

@@ -174,6 +174,50 @@ func TestRenameRejectsExistingTarget(t *testing.T) {
 	}
 }
 
+// A directory legitimately named something like "..bonus tracks" is inside
+// the music root, but the containment check compared against a bare ".."
+// prefix, so every track under it was indexed and playable yet could not be
+// renamed or deleted from the admin
+func TestManageTracksInsideDirectoryNamedWithLeadingDots(t *testing.T) {
+	rel := filepath.Join("..bonus tracks", "song.mp3")
+	m, lib, music := newTestManager(t, rel)
+	id := trackID(t, lib, music, rel)
+
+	if err := m.Rename(id, "renamed.mp3"); err != nil {
+		t.Fatalf("Rename inside a ..-prefixed directory: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(music, "..bonus tracks", "renamed.mp3")); err != nil {
+		t.Errorf("renamed file missing: %v", err)
+	}
+}
+
+func TestDeleteTrackInsideDirectoryNamedWithLeadingDots(t *testing.T) {
+	rel := filepath.Join("..bonus tracks", "song.mp3")
+	m, lib, music := newTestManager(t, rel)
+	id := trackID(t, lib, music, rel)
+
+	if err := m.Delete(id); err != nil {
+		t.Fatalf("Delete inside a ..-prefixed directory: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(music, rel)); !os.IsNotExist(err) {
+		t.Errorf("file survived Delete (stat err %v)", err)
+	}
+}
+
+// Ordinary nested directories must keep working too
+func TestManageTracksInsideNestedDirectory(t *testing.T) {
+	rel := filepath.Join("albums", "1998", "song.mp3")
+	m, lib, music := newTestManager(t, rel)
+	id := trackID(t, lib, music, rel)
+
+	if err := m.Rename(id, "renamed.mp3"); err != nil {
+		t.Fatalf("Rename in a nested directory: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(music, "albums", "1998", "renamed.mp3")); err != nil {
+		t.Errorf("renamed file missing: %v", err)
+	}
+}
+
 func TestRenameUnknownTrack(t *testing.T) {
 	m, _, _ := newTestManager(t, "song.mp3")
 	if err := m.Rename(99999, "new.mp3"); err == nil {

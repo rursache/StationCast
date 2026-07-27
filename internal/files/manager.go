@@ -38,8 +38,7 @@ func (m *Manager) Rename(id int64, newName string) error {
 	if !playlist.IsSupportedExt(newPath) {
 		return errors.New("unsupported file extension")
 	}
-	rel, err := filepath.Rel(m.cfg.MusicDir, newPath)
-	if err != nil || strings.HasPrefix(rel, "..") || rel == ".." {
+	if !playlist.WithinRoot(m.cfg.MusicDir, newPath) {
 		return errors.New("invalid path")
 	}
 	if _, err := os.Stat(newPath); err == nil {
@@ -60,8 +59,7 @@ func (m *Manager) Delete(id int64) error {
 	// Defence in depth: re-validate that the tracked path is still inside the
 	// configured music root before unlinking. The library scanner already
 	// rejects symlinks and out-of-root paths, so this should always pass
-	rel, err := filepath.Rel(m.cfg.MusicDir, t.Path)
-	if err != nil || strings.HasPrefix(rel, "..") || rel == ".." {
+	if !playlist.WithinRoot(m.cfg.MusicDir, t.Path) {
 		return errors.New("invalid path")
 	}
 	if err := os.Remove(t.Path); err != nil {
@@ -82,8 +80,7 @@ func (m *Manager) Save(name string, r io.Reader) error {
 		return errors.New("unsupported file extension")
 	}
 	dst := filepath.Join(m.cfg.MusicDir, name)
-	rel, err := filepath.Rel(m.cfg.MusicDir, dst)
-	if err != nil || strings.HasPrefix(rel, "..") || rel == ".." {
+	if !playlist.WithinRoot(m.cfg.MusicDir, dst) {
 		return errors.New("invalid path")
 	}
 	if _, err := os.Stat(dst); err == nil {
