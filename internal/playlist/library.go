@@ -37,9 +37,25 @@ func IsSupportedExt(name string) bool {
 	return supportedExt[strings.ToLower(filepath.Ext(name))]
 }
 
+// withinRoot reports whether path sits inside root. The separator in the
+// prefix check matters: a plain HasPrefix(rel, "..") also rejects a sibling
+// entry legitimately named something like "..bonus tracks"
+func withinRoot(root, path string) bool {
+	rel, err := filepath.Rel(root, path)
+	if err != nil {
+		return false
+	}
+	return rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
+}
+
 type Library struct {
 	cfg *config.Config
 	db  *storage.DB
+
+	// root is MusicDir with symlinks resolved, used to check paths that have
+	// themselves been resolved. config.Load already resolves MusicDir, but
+	// callers that build a Config directly may not have
+	root string
 
 	mu     sync.RWMutex
 	byPath map[string]*Track
@@ -52,9 +68,14 @@ type Library struct {
 }
 
 func NewLibrary(cfg *config.Config, db *storage.DB) *Library {
+	root := cfg.MusicDir
+	if resolved, err := filepath.EvalSymlinks(root); err == nil {
+		root = resolved
+	}
 	return &Library{
 		cfg:    cfg,
 		db:     db,
+		root:   root,
 		byPath: map[string]*Track{},
 		byID:   map[int64]*Track{},
 	}
@@ -175,9 +196,18 @@ func (l *Library) upsertFile(path string) error {
 	if li.Mode()&os.ModeSymlink != 0 {
 		return errors.New("symlinks are not allowed in the music directory")
 	}
-	rel, err := filepath.Rel(l.cfg.MusicDir, path)
-	if err != nil || strings.HasPrefix(rel, "..") || rel == ".." {
+	if !withinRoot(l.cfg.MusicDir, path) {
 		return errors.New("path outside music root")
+	}
+	// Lstat only inspects the last component and the check above is textual,
+	// so neither catches a symlinked directory earlier in the path. Resolve
+	// the whole thing and re-check against the resolved root
+	resolved, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		return err
+	}
+	if !withinRoot(l.root, resolved) {
+		return errors.New("path resolves outside music root")
 	}
 	st, err := os.Stat(path)
 	if err != nil {
@@ -243,6 +273,16 @@ func (l *Library) removeTrack(t *Track) {
 	_ = os.Remove(filepath.Join(l.cfg.DataDir, "art", fmt.Sprintf("%d.jpg", t.ID)))
 }
 
+// isWatchableDir reports whether a freshly created path is a real directory
+// worth adding to the watch set. Lstat, not Stat: a symlink pointing at a
+// directory outside the music root would otherwise get walked and its files
+// indexed, while the startup scan skips it because filepath.WalkDir does not
+// follow links. The two traversal paths have to agree
+func isWatchableDir(path string) bool {
+	fi, err := os.Lstat(path)
+	return err == nil && fi.IsDir()
+}
+
 func (l *Library) Watch(ctx context.Context) {
 	w, err := fsnotify.NewWatcher()
 	if err != nil {
@@ -284,11 +324,9 @@ func (l *Library) Watch(ctx context.Context) {
 				return
 			}
 			path := ev.Name
-			if ev.Op&fsnotify.Create != 0 {
-				if st, err := os.Stat(path); err == nil && st.IsDir() {
-					addRecursive(path)
-					continue
-				}
+			if ev.Op&fsnotify.Create != 0 && isWatchableDir(path) {
+				addRecursive(path)
+				continue
 			}
 			if !supportedExt[strings.ToLower(filepath.Ext(path))] {
 				continue
