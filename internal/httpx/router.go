@@ -68,21 +68,21 @@ func NewRouter(cfg *config.Config, db *storage.DB, lib *playlist.Library, sched 
 
 	r.Route("/admin", func(r chi.Router) {
 		r.Get("/login", s.handleLoginPage)
-		r.With(readTimeout(30 * time.Second)).Post("/login", s.handleLogin)
-		r.With(readTimeout(15 * time.Second)).Post("/logout", s.handleLogout)
+		r.With(readTimeout(30*time.Second)).Post("/login", s.handleLogin)
+		r.With(readTimeout(15*time.Second)).Post("/logout", s.handleLogout)
 
 		r.Group(func(r chi.Router) {
 			r.Use(s.requireAuth)
 			r.Get("/", s.handleAdminHome)
 			r.Get("/library.json", s.handleLibraryJSON)
 			r.Get("/state.json", s.handleAdminStateJSON)
-			r.With(readTimeout(15 * time.Second)).Post("/skip", s.handleSkip)
-			r.With(readTimeout(15 * time.Second)).Post("/mode", s.handleSetMode)
-			r.With(readTimeout(15 * time.Second)).Post("/queue", s.handleEnqueue)
-			r.With(readTimeout(15 * time.Second)).Post("/queue/remove", s.handleDequeue)
-			r.With(readTimeout(15 * time.Second)).Post("/files/rename", s.handleRename)
-			r.With(readTimeout(15 * time.Second)).Post("/files/delete", s.handleDelete)
-			r.With(readTimeout(10 * time.Minute)).Post("/files/upload", s.handleUpload)
+			r.With(readTimeout(15*time.Second)).Post("/skip", s.handleSkip)
+			r.With(readTimeout(15*time.Second)).Post("/mode", s.handleSetMode)
+			r.With(readTimeout(15*time.Second)).Post("/queue", s.handleEnqueue)
+			r.With(readTimeout(15*time.Second)).Post("/queue/remove", s.handleDequeue)
+			r.With(readTimeout(15*time.Second)).Post("/files/rename", s.handleRename)
+			r.With(readTimeout(15*time.Second)).Post("/files/delete", s.handleDelete)
+			r.With(readTimeout(10*time.Minute)).Post("/files/upload", s.handleUpload)
 		})
 	})
 
