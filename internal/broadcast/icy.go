@@ -2,24 +2,33 @@ package broadcast
 
 import (
 	"errors"
-	"fmt"
 	"io"
 	"strings"
+	"unicode/utf8"
 )
 
 const ICYMetaInt = 16384
+
+const (
+	// The block length is carried in a single byte counting 16-byte units, so
+	// a payload cannot exceed 255 of them
+	maxICYPayload = 16 * 255
+	icyPrefix     = "StreamTitle='"
+	icySuffix     = "';"
+	// What is left for the title itself once the framing is accounted for
+	maxICYTitleBytes = maxICYPayload - len(icyPrefix) - len(icySuffix)
+)
 
 // WriteICYBlock writes a SHOUTcast/Icecast metadata block.
 // Block format: 1 length byte (length / 16) + payload padded to a multiple of 16.
 // Payload looks like: StreamTitle='Artist - Title';\0\0...
 func WriteICYBlock(w io.Writer, title string) error {
-	payload := fmt.Sprintf("StreamTitle='%s';", sanitizeMeta(title))
-	rem := len(payload) % 16
-	if rem != 0 {
+	// Trim the title before assembling, not the finished payload. Cutting
+	// afterwards could land mid-rune and also lop off the closing ';'
+	// terminator, leaving clients with a block they cannot parse
+	payload := icyPrefix + truncateUTF8(sanitizeMeta(title), maxICYTitleBytes) + icySuffix
+	if rem := len(payload) % 16; rem != 0 {
 		payload += strings.Repeat("\x00", 16-rem)
-	}
-	if len(payload) > 16*255 {
-		payload = payload[:16*255]
 	}
 	lenByte := byte(len(payload) / 16)
 	if _, err := w.Write([]byte{lenByte}); err != nil {
@@ -36,6 +45,19 @@ func WriteICYBlock(w io.Writer, title string) error {
 func WriteEmptyICYBlock(w io.Writer) error {
 	_, err := w.Write([]byte{0})
 	return err
+}
+
+// truncateUTF8 cuts s to at most max bytes without splitting a rune. Slicing
+// a Go string is a byte operation, so a non-ASCII title cut at an arbitrary
+// offset yields invalid UTF-8 on the wire
+func truncateUTF8(s string, max int) string {
+	if len(s) <= max {
+		return s
+	}
+	for max > 0 && !utf8.RuneStart(s[max]) {
+		max--
+	}
+	return s[:max]
 }
 
 // sanitizeMeta strips characters that could break ICY framing or confuse
