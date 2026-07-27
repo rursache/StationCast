@@ -31,8 +31,8 @@ type Server struct {
 // NewRouter wires the HTTP routes and returns the handler plus a long-running
 // sweep function. The caller starts the sweep in a goroutine so expired
 // session tokens are evicted from memory periodically
-func NewRouter(cfg *config.Config, db *storage.DB, lib *playlist.Library, sched *playlist.Scheduler, hub *broadcast.Hub, hls *broadcast.HLSManager, eng *audio.Engine) (http.Handler, func(context.Context)) {
-	s := &Server{
+func newServer(cfg *config.Config, db *storage.DB, lib *playlist.Library, sched *playlist.Scheduler, hub *broadcast.Hub, hls *broadcast.HLSManager, eng *audio.Engine) *Server {
+	return &Server{
 		cfg:    cfg,
 		db:     db,
 		lib:    lib,
@@ -44,6 +44,10 @@ func NewRouter(cfg *config.Config, db *storage.DB, lib *playlist.Library, sched 
 		auth:   NewAuthStore(cfg.AdminPassword),
 		tmpl:   MustLoadTemplates(),
 	}
+}
+
+func NewRouter(cfg *config.Config, db *storage.DB, lib *playlist.Library, sched *playlist.Scheduler, hub *broadcast.Hub, hls *broadcast.HLSManager, eng *audio.Engine) (http.Handler, func(context.Context)) {
+	s := newServer(cfg, db, lib, sched, hub, hls, eng)
 
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
