@@ -20,6 +20,7 @@ type pcmSource struct {
 
 	curCmd *exec.Cmd
 	curOut io.ReadCloser
+	curErr *stderrPipe
 	curTrk *playlist.Track
 }
 
@@ -35,13 +36,14 @@ func (s *pcmSource) Read(p []byte) (int, error) {
 				s.eng.hub.SetMetadata(s.eng.cfg.StationName)
 				return fillSilence(p), nil
 			}
-			cmd, out, err := s.startDecoder(t)
+			cmd, out, errPipe, err := s.startDecoder(t)
 			if err != nil {
 				slog.Warn("decoder start failed", "track", t.Path, "err", err)
 				continue
 			}
 			s.curCmd = cmd
 			s.curOut = out
+			s.curErr = errPipe
 			s.curTrk = t
 			s.eng.mu.Lock()
 			s.eng.curCmd = cmd
@@ -70,19 +72,27 @@ func (s *pcmSource) Read(p []byte) (int, error) {
 			// Fire-and-forget: exec.CommandContext is bound to s.ctx, so engine
 			// shutdown still kills the process
 			cmd := s.curCmd
-			go func() { _ = cmd.Wait() }()
+			errPipe := s.curErr
+			go func() {
+				_ = cmd.Wait()
+				// Only safe after Wait: os/exec's stderr copier is still
+				// running until then. Without this the reader goroutine
+				// leaks once per track played
+				_ = errPipe.Close()
+			}()
 			s.eng.mu.Lock()
 			s.eng.curCmd = nil
 			s.eng.mu.Unlock()
 			s.curOut = nil
 			s.curCmd = nil
+			s.curErr = nil
 			s.curTrk = nil
 			continue
 		}
 	}
 }
 
-func (s *pcmSource) startDecoder(t *playlist.Track) (*exec.Cmd, io.ReadCloser, error) {
+func (s *pcmSource) startDecoder(t *playlist.Track) (*exec.Cmd, io.ReadCloser, *stderrPipe, error) {
 	// Force ffmpeg to treat the path as a file via the explicit file: protocol
 	// prefix. This neutralises any case where a filename could otherwise be
 	// misparsed as an option flag
@@ -102,15 +112,18 @@ func (s *pcmSource) startDecoder(t *playlist.Track) (*exec.Cmd, io.ReadCloser, e
 		"pipe:1",
 	)
 	cmd := exec.CommandContext(s.ctx, "ffmpeg", args...)
-	cmd.Stderr = stderrLogger("decoder")
+	errPipe := stderrLogger("decoder")
+	cmd.Stderr = errPipe
 	out, err := cmd.StdoutPipe()
 	if err != nil {
-		return nil, nil, err
+		_ = errPipe.Close()
+		return nil, nil, nil, err
 	}
 	if err := cmd.Start(); err != nil {
-		return nil, nil, err
+		_ = errPipe.Close()
+		return nil, nil, nil, err
 	}
-	return cmd, out, nil
+	return cmd, out, errPipe, nil
 }
 
 func fillSilence(p []byte) int {

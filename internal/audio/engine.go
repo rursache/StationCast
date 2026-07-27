@@ -89,10 +89,15 @@ func (e *Engine) runOnce(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	encCmd.Stderr = stderrLogger("encoder")
+	encErr := stderrLogger("encoder")
+	encCmd.Stderr = encErr
 	if err := encCmd.Start(); err != nil {
+		_ = encErr.Close()
 		return fmt.Errorf("start encoder: %w", err)
 	}
+	// Every branch below waits on encDone first, so os/exec's stderr copier
+	// has finished by the time this runs and closing is safe
+	defer encErr.Close()
 	slog.Info("encoder started", "bitrate", e.cfg.Bitrate)
 
 	encDone := make(chan error, 1)
@@ -161,9 +166,30 @@ func copyChunks(dst io.Writer, src io.Reader, chunk int) (int64, error) {
 	}
 }
 
-func stderrLogger(tag string) io.Writer {
+// stderrPipe forwards a subprocess's stderr to the debug log. Close must be
+// called once the process has been reaped, otherwise the reader goroutine
+// blocks forever: os/exec copies into a non-*os.File Stderr from its own
+// goroutine and never closes the writer, so nothing else ever delivers EOF.
+// Close waits for the reader to finish, so returning from it means the
+// goroutine is gone
+type stderrPipe struct {
+	w    *io.PipeWriter
+	done chan struct{}
+}
+
+func (p *stderrPipe) Write(b []byte) (int, error) { return p.w.Write(b) }
+
+func (p *stderrPipe) Close() error {
+	err := p.w.Close()
+	<-p.done
+	return err
+}
+
+func stderrLogger(tag string) *stderrPipe {
 	r, w := io.Pipe()
+	p := &stderrPipe{w: w, done: make(chan struct{})}
 	go func() {
+		defer close(p.done)
 		buf := make([]byte, 1024)
 		for {
 			n, err := r.Read(buf)
@@ -175,5 +201,5 @@ func stderrLogger(tag string) io.Writer {
 			}
 		}
 	}()
-	return w
+	return p
 }

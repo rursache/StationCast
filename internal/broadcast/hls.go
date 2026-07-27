@@ -15,9 +15,9 @@ import (
 // writes a rolling HLS playlist + segments to disk. The HTTP layer serves
 // those files.
 type HLSManager struct {
-	hub     *Hub
-	dir     string
-	segDir  string
+	hub      *Hub
+	dir      string
+	segDir   string
 	playlist string
 }
 
@@ -71,14 +71,20 @@ func (m *HLSManager) runOnce(ctx context.Context) error {
 		"-hls_segment_filename", pattern,
 		m.playlist,
 	)
-	cmd.Stderr = stderrLogger("hls")
+	errPipe := stderrLogger("hls")
+	cmd.Stderr = errPipe
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
+		_ = errPipe.Close()
 		return err
 	}
 	if err := cmd.Start(); err != nil {
+		_ = errPipe.Close()
 		return err
 	}
+	// Both branches below wait on done first, so os/exec's stderr copier has
+	// finished by the time this runs
+	defer errPipe.Close()
 
 	sub := m.hub.SubscribeInternal()
 	defer sub.Close()
@@ -105,9 +111,30 @@ func (m *HLSManager) runOnce(ctx context.Context) error {
 	}
 }
 
-func stderrLogger(tag string) io.Writer {
+// stderrPipe forwards a subprocess's stderr to the debug log. Close must be
+// called once the process has been reaped, otherwise the reader goroutine
+// blocks forever: os/exec copies into a non-*os.File Stderr from its own
+// goroutine and never closes the writer, so nothing else ever delivers EOF.
+// Close waits for the reader to finish, so returning from it means the
+// goroutine is gone
+type stderrPipe struct {
+	w    *io.PipeWriter
+	done chan struct{}
+}
+
+func (p *stderrPipe) Write(b []byte) (int, error) { return p.w.Write(b) }
+
+func (p *stderrPipe) Close() error {
+	err := p.w.Close()
+	<-p.done
+	return err
+}
+
+func stderrLogger(tag string) *stderrPipe {
 	r, w := io.Pipe()
+	p := &stderrPipe{w: w, done: make(chan struct{})}
 	go func() {
+		defer close(p.done)
 		buf := make([]byte, 1024)
 		for {
 			n, err := r.Read(buf)
@@ -119,5 +146,5 @@ func stderrLogger(tag string) io.Writer {
 			}
 		}
 	}()
-	return w
+	return p
 }
