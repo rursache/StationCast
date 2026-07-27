@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -59,13 +60,18 @@ func NewLibrary(cfg *config.Config, db *storage.DB) *Library {
 	}
 }
 
+// Snapshot returns every track ordered by path. The order must be stable:
+// ModeSequential picks the next track by indexing this slice, and ranging the
+// map directly gave Go's randomised iteration order, which made "sequential"
+// behave like a second shuffle
 func (l *Library) Snapshot() []*Track {
 	l.mu.RLock()
-	defer l.mu.RUnlock()
 	out := make([]*Track, 0, len(l.byPath))
 	for _, t := range l.byPath {
 		out = append(out, t)
 	}
+	l.mu.RUnlock()
+	sort.Slice(out, func(i, j int) bool { return out[i].Path < out[j].Path })
 	return out
 }
 
