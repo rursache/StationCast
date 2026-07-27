@@ -9,6 +9,12 @@ import (
 	"strings"
 )
 
+// Bitrate bounds accepted by libmp3lame, the encoder StationCast shells out to
+const (
+	MinBitrate = 8
+	MaxBitrate = 320
+)
+
 type Config struct {
 	// Version is the build-time version string injected via -ldflags
 	// '-X main.version=...' and forwarded into Config by main.go after Load
@@ -50,6 +56,11 @@ func Load() (*Config, error) {
 	br, err := strconv.Atoi(env("STATIONCAST_BITRATE", "128"))
 	if err != nil {
 		return nil, fmt.Errorf("invalid STATIONCAST_BITRATE: %w", err)
+	}
+	// libmp3lame accepts 8-320 kbps. Anything outside that makes ffmpeg fail at
+	// encoder start, which surfaces as a restart loop rather than a clear error
+	if br < MinBitrate || br > MaxBitrate {
+		return nil, fmt.Errorf("invalid STATIONCAST_BITRATE: %d outside %d-%d kbps", br, MinBitrate, MaxBitrate)
 	}
 	cfg.Bitrate = br
 

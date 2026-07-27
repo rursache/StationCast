@@ -124,7 +124,7 @@ The public web UI at `/` auto-picks HLS on iOS Safari and the direct MP3 stream 
 | `STATIONCAST_DATA_DIR` | `./data` | SQLite index, album art cache, HLS segments |
 | `STATIONCAST_ADDR` | `:8000` | Listen address |
 | `STATIONCAST_PUBLIC_URL` | `` (request host) | External base URL used in PLS/M3U files |
-| `STATIONCAST_BITRATE` | `128` | MP3 output bitrate, kbps |
+| `STATIONCAST_BITRATE` | `128` | MP3 output bitrate, kbps. Must be 8-320, the range libmp3lame accepts |
 | `STATIONCAST_STATION_NAME` | `StationCast` | Shown in ICY headers, the public UI, and as the MediaSession fallback when a track has no album tag |
 | `STATIONCAST_STATION_GENRE` | `Various` | ICY genre header |
 | `STATIONCAST_LOUDNORM` | `false` | Apply per-track ffmpeg `loudnorm` so volume does not jump between tracks. Dynamic real-time analysis of the decoded PCM, targets -16 LUFS / -1.5 dBTP |
