@@ -13,6 +13,13 @@ import (
 // still drops slow listeners rather than back-pressuring the encoder
 const subBufferChunks = 512
 
+// Reasons a subscription can be refused. Callers distinguish them because a
+// capacity refusal is worth retrying and a closed hub is not
+var (
+	ErrHubClosed  = errors.New("hub closed")
+	ErrAtCapacity = errors.New("listener limit reached")
+)
+
 type Subscriber struct {
 	hub *Hub
 	ch  chan []byte
@@ -66,7 +73,7 @@ func (h *Hub) Write(p []byte) (int, error) {
 	h.mu.Lock()
 	if h.closed {
 		h.mu.Unlock()
-		return 0, errors.New("hub closed")
+		return 0, ErrHubClosed
 	}
 	dropped := []*Subscriber{}
 	cp := make([]byte, len(p))
@@ -85,45 +92,38 @@ func (h *Hub) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
-// Subscribe registers a client listener. Returns nil if the configured cap
-// is reached. The HLS feeder uses SubscribeInternal to bypass the cap
-func (h *Hub) Subscribe() *Subscriber {
-	s := &Subscriber{
-		hub: h,
-		ch:  make(chan []byte, subBufferChunks),
-	}
-	h.mu.Lock()
-	if h.closed {
-		h.mu.Unlock()
-		close(s.ch)
-		return s
-	}
-	if h.maxListeners > 0 && len(h.subs) >= h.maxListeners {
-		h.mu.Unlock()
-		close(s.ch)
-		return nil
-	}
-	h.subs[s] = struct{}{}
-	h.mu.Unlock()
-	return s
+// Subscribe registers a client listener. The HLS feeder uses SubscribeInternal
+// to bypass the cap
+func (h *Hub) Subscribe() (*Subscriber, error) {
+	return h.subscribe(true)
 }
 
 // SubscribeInternal is for in-process consumers (the HLS feeder) that must
 // not be subject to the listener cap
-func (h *Hub) SubscribeInternal() *Subscriber {
+func (h *Hub) SubscribeInternal() (*Subscriber, error) {
+	return h.subscribe(false)
+}
+
+// subscribe reports why it failed rather than overloading the return value.
+// Subscribe used to hand back a live-looking Subscriber whose channel was
+// already closed when the hub was shut down, but nil when the cap was hit, so
+// the only caller's nil check silently let the shutdown case through and
+// served a 200 with a body that ended immediately
+func (h *Hub) subscribe(capped bool) (*Subscriber, error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.closed {
+		return nil, ErrHubClosed
+	}
+	if capped && h.maxListeners > 0 && len(h.subs) >= h.maxListeners {
+		return nil, ErrAtCapacity
+	}
 	s := &Subscriber{
 		hub: h,
 		ch:  make(chan []byte, subBufferChunks),
 	}
-	h.mu.Lock()
-	if h.closed {
-		h.mu.Unlock()
-		close(s.ch)
-		return s
-	}
 	h.subs[s] = struct{}{}
-	h.mu.Unlock()
-	return s
+	return s, nil
 }
 
 func (h *Hub) unsubscribe(s *Subscriber) {

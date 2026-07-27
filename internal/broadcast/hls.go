@@ -86,7 +86,14 @@ func (m *HLSManager) runOnce(ctx context.Context) error {
 	// finished by the time this runs
 	defer errPipe.Close()
 
-	sub := m.hub.SubscribeInternal()
+	sub, err := m.hub.SubscribeInternal()
+	if err != nil {
+		// Nothing to feed the remuxer, so tear the process back down rather
+		// than leaving it parked on an stdin that will never see data
+		_ = cmd.Process.Kill()
+		_ = cmd.Wait()
+		return err
+	}
 	defer sub.Close()
 
 	done := make(chan error, 1)

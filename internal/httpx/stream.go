@@ -2,6 +2,7 @@ package httpx
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -16,10 +17,14 @@ import (
 func (s *Server) handleStream(w http.ResponseWriter, r *http.Request) {
 	wantMeta := r.Header.Get("Icy-MetaData") == "1"
 
-	sub := s.hub.Subscribe()
-	if sub == nil {
+	sub, err := s.hub.Subscribe()
+	if err != nil {
+		msg := "stream unavailable"
+		if errors.Is(err, broadcast.ErrAtCapacity) {
+			msg = "stream at capacity"
+		}
 		w.Header().Set("Retry-After", "30")
-		http.Error(w, "stream at capacity", http.StatusServiceUnavailable)
+		http.Error(w, msg, http.StatusServiceUnavailable)
 		return
 	}
 	defer sub.Close()
