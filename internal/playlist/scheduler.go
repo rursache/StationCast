@@ -155,26 +155,37 @@ func (s *Scheduler) Enqueue(id int64) error {
 		return errors.New("track not found")
 	}
 	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.manual = append(s.manual, id)
-	pos := len(s.manual)
-	s.mu.Unlock()
-	_, err := s.db.Exec(`INSERT INTO queue(track_id, position) VALUES(?, ?)`, id, pos)
-	return err
+	if err := s.persistQueueLocked(); err != nil {
+		s.manual = s.manual[:len(s.manual)-1]
+		return err
+	}
+	return nil
 }
 
 func (s *Scheduler) Dequeue(idx int) error {
 	s.mu.Lock()
+	defer s.mu.Unlock()
 	if idx < 0 || idx >= len(s.manual) {
-		s.mu.Unlock()
 		return errors.New("index out of range")
 	}
+	removed := s.manual[idx]
 	s.manual = append(s.manual[:idx], s.manual[idx+1:]...)
-	snapshot := append([]int64(nil), s.manual...)
-	s.mu.Unlock()
-	return s.replaceQueue(snapshot)
+	if err := s.persistQueueLocked(); err != nil {
+		s.manual = append(s.manual[:idx], append([]int64{removed}, s.manual[idx:]...)...)
+		return err
+	}
+	return nil
 }
 
-func (s *Scheduler) replaceQueue(ids []int64) error {
+// persistQueueLocked rewrites the queue table to match s.manual. It must be
+// called with s.mu held: the read of s.manual and the write have to be one
+// atomic step, otherwise a concurrent caller can take its snapshot in between
+// and the DELETE + reinsert either resurrects a dequeued track or drops a
+// freshly enqueued one. SetMaxOpenConns(1) serialises individual statements
+// but not a read-modify-write spanning two calls
+func (s *Scheduler) persistQueueLocked() error {
 	tx, err := s.db.Begin()
 	if err != nil {
 		return err
@@ -183,7 +194,7 @@ func (s *Scheduler) replaceQueue(ids []int64) error {
 	if _, err := tx.Exec(`DELETE FROM queue`); err != nil {
 		return err
 	}
-	for i, id := range ids {
+	for i, id := range s.manual {
 		if _, err := tx.Exec(`INSERT INTO queue(track_id, position) VALUES(?, ?)`, id, i+1); err != nil {
 			return err
 		}
@@ -194,17 +205,15 @@ func (s *Scheduler) replaceQueue(ids []int64) error {
 // Pick chooses the next track per mode, respecting manual queue priority.
 // Returns nil if library is empty.
 func (s *Scheduler) Pick() *Track {
-	for {
-		s.mu.Lock()
-		if len(s.manual) == 0 {
-			break
-		}
+	s.mu.Lock()
+	for len(s.manual) > 0 {
 		id := s.manual[0]
 		s.manual = s.manual[1:]
-		snapshot := append([]int64(nil), s.manual...)
-		s.mu.Unlock()
-		_ = s.replaceQueue(snapshot)
+		// Persist while still holding the lock so the drain and the rewrite
+		// cannot interleave with a concurrent Enqueue or Dequeue
+		_ = s.persistQueueLocked()
 		if t, ok := s.lib.Get(id); ok {
+			s.mu.Unlock()
 			return t
 		}
 		// Stale queue entry, keep draining until we hit a valid track or
