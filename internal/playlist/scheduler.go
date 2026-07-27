@@ -348,7 +348,15 @@ func (s *Scheduler) Peek() *Track {
 	}
 	switch mode {
 	case ModeLoop:
-		return cur
+		// Same fallback Pick uses. Without the lookup, deleting the looping
+		// track left the admin showing it as up next indefinitely while
+		// playback had already moved on to the first track
+		if cur != nil {
+			if t, ok := s.lib.Get(cur.ID); ok {
+				return t
+			}
+		}
+		return tracks[0]
 	case ModeSequential:
 		if cur == nil {
 			return tracks[0]

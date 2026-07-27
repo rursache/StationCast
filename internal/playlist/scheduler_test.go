@@ -399,6 +399,63 @@ func TestQueuePersistenceUnderConcurrentMutation(t *testing.T) {
 	assertQueuesAgree(t, s)
 }
 
+// Peek drives the admin and public "up next" label, so it has to agree with
+// what Pick will actually return. In loop mode it returned the current track
+// without checking the library still has it, so deleting the looping track
+// left the UI advertising a track that could never play
+func TestLoopPeekMatchesPickAfterCurrentTrackIsRemoved(t *testing.T) {
+	s := newTestSchedulerWith(t, 4)
+	if err := s.SetMode(ModeLoop); err != nil {
+		t.Fatal(err)
+	}
+
+	first := s.Pick()
+	if first == nil {
+		t.Fatal("Pick returned nil")
+	}
+	s.MarkPlaying(first)
+
+	// The looping track leaves the library mid-play
+	s.lib.removeTrack(first)
+
+	peeked := s.Peek()
+	picked := s.Pick()
+	if picked == nil {
+		t.Fatal("Pick returned nil after the looping track was removed")
+	}
+	if picked.ID == first.ID {
+		t.Fatal("Pick returned the removed track")
+	}
+	if peeked == nil {
+		t.Fatalf("Peek returned nil while Pick returned %d", picked.ID)
+	}
+	if peeked.ID == first.ID {
+		t.Error("Peek still advertises the removed track as up next")
+	}
+	if peeked.ID != picked.ID {
+		t.Errorf("Peek = %d but Pick = %d", peeked.ID, picked.ID)
+	}
+}
+
+func TestLoopPeekMatchesPickNormally(t *testing.T) {
+	s := newTestSchedulerWith(t, 3)
+	if err := s.SetMode(ModeLoop); err != nil {
+		t.Fatal(err)
+	}
+
+	for i := 0; i < 4; i++ {
+		peeked := s.Peek()
+		picked := s.Pick()
+		if picked == nil {
+			t.Fatalf("Pick at %d returned nil", i)
+		}
+		if peeked == nil || peeked.ID != picked.ID {
+			t.Fatalf("step %d: Peek = %v but Pick = %d", i, peeked, picked.ID)
+		}
+		s.MarkPlaying(picked)
+	}
+}
+
 func TestLoopModeRepeatsCurrentTrack(t *testing.T) {
 	s := newTestSchedulerWith(t, 4)
 	if err := s.SetMode(ModeLoop); err != nil {
