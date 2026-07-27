@@ -11,7 +11,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 )
@@ -214,7 +213,7 @@ func (l *Library) FetchMissingArt(ctx context.Context) {
 			time.Sleep(itunesPause)
 			continue
 		}
-		dst := filepath.Join(l.cfg.DataDir, "art", fmt.Sprintf("%d.jpg", first.id))
+		dst := artPath(l.cfg.DataDir, first.id)
 		if err := downloadTo(ctx, client, artURL, dst); err != nil {
 			slog.Debug("itunes: download failed", "url", artURL, "err", err)
 			l.markArtTried(group)
@@ -222,7 +221,7 @@ func (l *Library) FetchMissingArt(ctx context.Context) {
 			continue
 		}
 		for _, r := range group[1:] {
-			if err := copyFile(dst, filepath.Join(l.cfg.DataDir, "art", fmt.Sprintf("%d.jpg", r.id))); err != nil {
+			if err := copyFile(dst, artPath(l.cfg.DataDir, r.id)); err != nil {
 				slog.Debug("itunes: copy art", "id", r.id, "err", err)
 			}
 		}
@@ -273,7 +272,7 @@ func (l *Library) RefreshArt(ctx context.Context, t *Track) {
 	if artURL == "" {
 		return
 	}
-	dst := filepath.Join(l.cfg.DataDir, "art", fmt.Sprintf("%d.jpg", t.ID))
+	dst := artPath(l.cfg.DataDir, t.ID)
 	if err := downloadTo(ctx, client, artURL, dst); err != nil {
 		slog.Debug("itunes: refresh download failed", "id", t.ID, "err", err)
 		return

@@ -224,6 +224,85 @@ func TestUpsertFileLeavesArtTriedAloneWhenUnchanged(t *testing.T) {
 	}
 }
 
+// Cached covers are only ever deleted when a track leaves the library, so a
+// file rewritten without its embedded picture left its old art behind. Nothing
+// served it because HasArt was false, it just accumulated on disk
+func TestUpsertFileRemovesStaleArtWhenEmbeddedArtDisappears(t *testing.T) {
+	music := t.TempDir()
+	data := t.TempDir()
+	p := filepath.Join(music, "song.mp3")
+	if err := os.WriteFile(p, []byte("first recording"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	lib := newTestLibrary(t, music, data)
+	if err := lib.upsertFile(p); err != nil {
+		t.Fatalf("upsertFile: %v", err)
+	}
+	tr, ok := lib.GetByPath(p)
+	if !ok {
+		t.Fatal("track was not indexed")
+	}
+
+	// Stand in for art cached by an earlier scan or iTunes lookup
+	cached := artPath(data, tr.ID)
+	if err := os.WriteFile(cached, []byte("jpeg bytes"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// The fake mp3 carries no readable tags, so the rescan sees no art
+	if err := os.WriteFile(p, []byte("a different recording with no picture"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(p, time.Now().Add(time.Hour), time.Now().Add(time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	if err := lib.upsertFile(p); err != nil {
+		t.Fatalf("upsertFile after replacement: %v", err)
+	}
+
+	if _, err := os.Stat(cached); !os.IsNotExist(err) {
+		t.Errorf("stale art still on disk at %s (stat err %v)", cached, err)
+	}
+}
+
+func TestRemoveTrackDeletesCachedArt(t *testing.T) {
+	music := t.TempDir()
+	data := t.TempDir()
+	p := filepath.Join(music, "song.mp3")
+	if err := os.WriteFile(p, []byte("recording"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	lib := newTestLibrary(t, music, data)
+	if err := lib.upsertFile(p); err != nil {
+		t.Fatalf("upsertFile: %v", err)
+	}
+	tr, _ := lib.GetByPath(p)
+
+	cached := artPath(data, tr.ID)
+	if err := os.WriteFile(cached, []byte("jpeg bytes"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	lib.removeTrack(tr)
+
+	if _, err := os.Stat(cached); !os.IsNotExist(err) {
+		t.Errorf("cached art survived removeTrack (stat err %v)", err)
+	}
+	if lib.Count() != 0 {
+		t.Errorf("library still holds %d tracks", lib.Count())
+	}
+}
+
+func TestArtPath(t *testing.T) {
+	got := artPath(filepath.FromSlash("/data"), 42)
+	want := filepath.Join(filepath.FromSlash("/data"), "art", "42.jpg")
+	if got != want {
+		t.Errorf("artPath = %q, want %q", got, want)
+	}
+}
+
 // Snapshot backs ModeSequential's "next track" indexing, so its order has to
 // be identical across calls and sorted by path rather than by map iteration
 func TestSnapshotOrderIsStableAndSortedByPath(t *testing.T) {

@@ -37,6 +37,11 @@ func IsSupportedExt(name string) bool {
 	return supportedExt[strings.ToLower(filepath.Ext(name))]
 }
 
+// artPath is where a track's cached cover lives on disk
+func artPath(dataDir string, id int64) string {
+	return filepath.Join(dataDir, "art", fmt.Sprintf("%d.jpg", id))
+}
+
 // withinRoot reports whether path sits inside root. The separator in the
 // prefix check matters: a plain HasPrefix(rel, "..") also rejects a sibling
 // entry legitimately named something like "..bonus tracks"
@@ -245,6 +250,11 @@ func (l *Library) upsertFile(path string) error {
 		existing.HasArt = hasArt
 		if hasArt {
 			_ = saveArt(l.cfg.DataDir, existing.ID, path)
+		} else {
+			// The replacement has no embedded picture, so whatever is cached
+			// on disk belongs to the previous file. Serving is gated on
+			// HasArt so it was invisible, but it accumulated forever
+			_ = os.Remove(artPath(l.cfg.DataDir, existing.ID))
 		}
 		return nil
 	}
@@ -274,7 +284,7 @@ func (l *Library) removeTrack(t *Track) {
 	delete(l.byPath, t.Path)
 	delete(l.byID, t.ID)
 	l.mu.Unlock()
-	_ = os.Remove(filepath.Join(l.cfg.DataDir, "art", fmt.Sprintf("%d.jpg", t.ID)))
+	_ = os.Remove(artPath(l.cfg.DataDir, t.ID))
 }
 
 // isWatchableDir reports whether a freshly created path is a real directory
@@ -400,8 +410,7 @@ func saveArt(dataDir string, id int64, path string) error {
 	if len(pic.Data) > maxArtBytes {
 		return fmt.Errorf("embedded art exceeds %d byte limit", maxArtBytes)
 	}
-	out := filepath.Join(dataDir, "art", fmt.Sprintf("%d.jpg", id))
-	return os.WriteFile(out, pic.Data, 0o644)
+	return os.WriteFile(artPath(dataDir, id), pic.Data, 0o644)
 }
 
 func nullStr(s string) any {
