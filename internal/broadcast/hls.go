@@ -8,7 +8,18 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"time"
+)
+
+const (
+	hlsSegmentSeconds = 4
+	// A wider window gives a player room to sit further from the live edge
+	// without falling off the back of the playlist
+	hlsListSize = 10
+	// Segments survive this many rotations past leaving the playlist, so a
+	// player at the oldest entry is never racing the delete
+	hlsDeleteThreshold = 6
 )
 
 // HLSManager runs an ffmpeg subprocess that consumes MP3 from the hub and
@@ -64,8 +75,15 @@ func (m *HLSManager) runOnce(ctx context.Context) error {
 		"-f", "mp3", "-i", "pipe:0",
 		"-c:a", "copy",
 		"-f", "hls",
-		"-hls_time", "4",
-		"-hls_list_size", "6",
+		"-hls_time", strconv.Itoa(hlsSegmentSeconds),
+		"-hls_list_size", strconv.Itoa(hlsListSize),
+		// Keep segments on disk for a while after they leave the playlist.
+		// A player is entitled to start at the oldest entry, which puts it
+		// hls_time*hls_list_size behind live, and a segment is dropped from
+		// the playlist exactly that long after it was written. Without a
+		// grace margin such a player requests a segment at the very moment
+		// it is deleted and gets a 404
+		"-hls_delete_threshold", strconv.Itoa(hlsDeleteThreshold),
 		"-hls_flags", "delete_segments+append_list+omit_endlist+independent_segments",
 		"-hls_segment_type", "mpegts",
 		"-hls_segment_filename", pattern,
