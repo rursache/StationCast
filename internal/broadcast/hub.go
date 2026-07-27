@@ -134,10 +134,10 @@ func (h *Hub) unsubscribe(s *Subscriber) {
 	}
 	delete(h.subs, s)
 	h.mu.Unlock()
-	go func() {
-		for range s.ch {
-		}
-	}()
+	// Whoever won the delete above is the only one that closes, so this is
+	// safe against a concurrent Write dropping the same slow subscriber.
+	// Sends only happen under the lock and only to subscribers still in the
+	// map, so nothing can send after this point
 	close(s.ch)
 }
 

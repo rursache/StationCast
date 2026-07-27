@@ -16,10 +16,10 @@ import (
 )
 
 const (
-	sampleRate    = 44100
-	channels      = 2
-	bytesPerSec   = sampleRate * channels * 2 // s16le stereo
-	pumpChunkMS   = 100
+	sampleRate  = 44100
+	channels    = 2
+	bytesPerSec = sampleRate * channels * 2 // s16le stereo
+	// How much PCM the pump moves per iteration, 100ms worth
 	pumpChunkSize = bytesPerSec / 10
 )
 

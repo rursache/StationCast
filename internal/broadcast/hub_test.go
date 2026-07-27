@@ -188,6 +188,53 @@ func TestWriteDropsSlowSubscriberInsteadOfBlocking(t *testing.T) {
 	}
 }
 
+// Unsubscribing closes the channel but must not discard what is already
+// queued: the consumer drains the remainder and then sees the close. A drain
+// goroutine used to run alongside, racing the real consumer for those chunks
+func TestUnsubscribeLeavesBufferedAudioForTheConsumer(t *testing.T) {
+	h := NewHub(128)
+	sub := mustSubscribe(t, h)
+
+	const chunks = 8
+	for i := 0; i < chunks; i++ {
+		if _, err := h.Write([]byte{byte(i)}); err != nil {
+			t.Fatalf("Write %d: %v", i, err)
+		}
+	}
+
+	sub.Close()
+
+	// The real consumer is inside ICYStream and gets back to the channel
+	// when its current write finishes, not instantly
+	time.Sleep(50 * time.Millisecond)
+
+	var got []byte
+	for b := range sub.Chan() {
+		got = append(got, b[0])
+	}
+	if len(got) != chunks {
+		t.Fatalf("consumer drained %d of %d buffered chunks after unsubscribe", len(got), chunks)
+	}
+	for i, b := range got {
+		if b != byte(i) {
+			t.Errorf("chunk %d = %d, want %d: order was not preserved", i, b, i)
+		}
+	}
+}
+
+func TestUnsubscribeIsIdempotent(t *testing.T) {
+	h := NewHub(128)
+	sub := mustSubscribe(t, h)
+
+	sub.Close()
+	sub.Close()
+	sub.Close()
+
+	if got := h.Listeners(); got != 0 {
+		t.Errorf("Listeners = %d after repeated Close, want 0", got)
+	}
+}
+
 func TestWriteAfterCloseReportsClosedHub(t *testing.T) {
 	h := NewHub(128)
 	h.Close()

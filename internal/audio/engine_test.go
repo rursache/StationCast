@@ -7,6 +7,20 @@ import (
 	"time"
 )
 
+// The pacer derives its timing from bytesPerSec, and the pump moves one
+// chunk per iteration, so the two have to stay in step
+func TestAudioConstants(t *testing.T) {
+	if want := 44100 * 2 * 2; bytesPerSec != want {
+		t.Errorf("bytesPerSec = %d, want %d for s16le stereo at 44.1kHz", bytesPerSec, want)
+	}
+	if want := bytesPerSec / 10; pumpChunkSize != want {
+		t.Errorf("pumpChunkSize = %d, want %d (100ms of audio)", pumpChunkSize, want)
+	}
+	if pumpChunkSize%(channels*2) != 0 {
+		t.Errorf("pumpChunkSize %d is not a whole number of stereo frames", pumpChunkSize)
+	}
+}
+
 // blockingReader hands out PCM until release is closed, then blocks forever.
 // Stands in for a decoder that has gone quiet
 type blockingReader struct {
