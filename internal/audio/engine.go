@@ -138,6 +138,13 @@ func (e *Engine) runOnce(ctx context.Context) error {
 		return ctx.Err()
 	case err := <-encDone:
 		pcmCancel()
+		// The encoder is already gone, but its stdin still has to be closed
+		// explicitly. The PCM pump is blocked writing into it and only
+		// notices via the write failing; leaving the fd open relies on the
+		// kernel getting round to delivering EPIPE. Not waiting on copyDone
+		// here on purpose: the pump may be parked in a decoder read, and the
+		// stall watchdog is what unblocks that
+		_ = encStdin.Close()
 		<-pumpDone
 		return fmt.Errorf("encoder exited: %w", err)
 	case err := <-copyDone:
