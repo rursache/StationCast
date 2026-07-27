@@ -132,6 +132,7 @@ The public web UI at `/` auto-picks HLS on iOS Safari and the direct MP3 stream 
 | `STATIONCAST_GAIN_DB` | `0` | Source volume boost in dB (range -20 to +20). Applied after loudnorm so it stacks. Aggressive positive values combined with loudnorm can clip the output (loudnorm targets a true-peak of -1.5 dBTP, so anything above +1 dB will start to push peaks above 0 dB) |
 | `STATIONCAST_ITUNES_ART` | `true` | Fetch missing album art from the iTunes Search API when artist + album tags exist |
 | `STATIONCAST_MAX_LISTENERS` | `256` | Hard cap on concurrent `/stream` connections. Excess listeners get HTTP 503. Set to `0` for unlimited (not recommended) |
+| `STATIONCAST_BURST_SECONDS` | `4` | Seconds of already-encoded audio sent to a listener the moment it connects, so its player starts with a buffer instead of running with no margin. Raising it makes playback more tolerant of jitter at the cost of being further behind live. `0` disables it (max `30`) |
 | `STATIONCAST_RECAPTCHA_SITE_KEY` | `` | Optional Google reCAPTCHA v3 site key. When set together with the secret, the login form runs an invisible v3 challenge with action `login` |
 | `STATIONCAST_RECAPTCHA_SECRET_KEY` | `` | Optional Google reCAPTCHA v3 secret. Verified against the siteverify endpoint on every login attempt, requiring `success=true`, matching action, and score >= 0.5 |
 | `PUID` | `1000` (Docker only) | Numeric uid the in-container `app` user runs as. Set to match the host owner of your bind-mounted `/data` (and `/music`) on a NAS or rootless host |

@@ -43,6 +43,7 @@ func main() {
 		"replaygain", cfg.ReplayGain,
 		"gain_db", cfg.GainDB,
 		"max_listeners", cfg.MaxListeners,
+		"burst_seconds", cfg.BurstSeconds,
 		"recaptcha", cfg.RecaptchaSiteKey != "",
 	)
 
@@ -77,6 +78,7 @@ func main() {
 
 	hub := broadcast.NewHub(cfg.Bitrate)
 	hub.SetMaxListeners(cfg.MaxListeners)
+	hub.SetBurstSeconds(cfg.BurstSeconds)
 	hls := broadcast.NewHLSManager(hub, cfg.DataDir)
 	spawn(hls.Run)
 

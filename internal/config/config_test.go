@@ -3,6 +3,8 @@ package config
 import (
 	"strconv"
 	"testing"
+
+	"github.com/rursache/StationCast/internal/broadcast"
 )
 
 // setBaseEnv points the loader at throwaway directories and satisfies the
@@ -121,6 +123,43 @@ func TestLoadMaxListeners(t *testing.T) {
 			}
 			if cfg.MaxListeners != tc.want {
 				t.Errorf("MaxListeners = %d, want %d", cfg.MaxListeners, tc.want)
+			}
+		})
+	}
+}
+
+func TestLoadBurstSeconds(t *testing.T) {
+	cases := []struct {
+		value   string
+		want    int
+		wantErr bool
+	}{
+		{value: "", want: broadcast.DefaultBurstSeconds},
+		{value: "0", want: 0}, // explicitly disabled
+		{value: "1", want: 1},
+		{value: "10", want: 10},
+		{value: strconv.Itoa(broadcast.MaxBurstSeconds), want: broadcast.MaxBurstSeconds},
+		{value: strconv.Itoa(broadcast.MaxBurstSeconds + 1), wantErr: true},
+		{value: "-1", wantErr: true},
+		{value: "lots", wantErr: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.value, func(t *testing.T) {
+			setBaseEnv(t)
+			t.Setenv("STATIONCAST_BURST_SECONDS", tc.value)
+
+			cfg, err := Load()
+			if tc.wantErr {
+				if err == nil {
+					t.Fatalf("Load() with burst %q = nil error, want error", tc.value)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("Load(): %v", err)
+			}
+			if cfg.BurstSeconds != tc.want {
+				t.Errorf("BurstSeconds = %d, want %d", cfg.BurstSeconds, tc.want)
 			}
 		})
 	}

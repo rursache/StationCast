@@ -43,6 +43,7 @@ type Hub struct {
 	subs    map[*Subscriber]struct{}
 	clients int // subs excluding in-process consumers
 	closed  bool
+	burst   *burstBuffer
 
 	meta atomic.Pointer[string]
 }
@@ -51,10 +52,19 @@ func NewHub(bitrate int) *Hub {
 	h := &Hub{
 		bitrate: bitrate,
 		subs:    map[*Subscriber]struct{}{},
+		burst:   newBurstBuffer(burstBytes(bitrate, DefaultBurstSeconds)),
 	}
 	empty := ""
 	h.meta.Store(&empty)
 	return h
+}
+
+// SetBurstSeconds resizes the burst handed to joining listeners. Zero
+// disables it, which returns to giving new listeners no buffer at all
+func (h *Hub) SetBurstSeconds(sec int) {
+	h.mu.Lock()
+	h.burst = newBurstBuffer(burstBytes(h.bitrate, sec))
+	h.mu.Unlock()
 }
 
 func (h *Hub) Bitrate() int { return h.bitrate }
@@ -80,6 +90,7 @@ func (h *Hub) Write(p []byte) (int, error) {
 		h.mu.Unlock()
 		return 0, ErrHubClosed
 	}
+	h.burst.write(p)
 	dropped := []*Subscriber{}
 	cp := make([]byte, len(p))
 	copy(cp, p)
@@ -130,6 +141,15 @@ func (h *Hub) subscribe(client bool) (*Subscriber, error) {
 		hub:    h,
 		ch:     make(chan []byte, subBufferChunks),
 		client: client,
+	}
+	// Only real clients get the burst. Handing it to the HLS feeder would
+	// re-encode audio that has already been segmented, duplicating a few
+	// seconds of the timeline every time that process restarts.
+	// The channel is empty and buffered, so this send cannot block
+	if client {
+		if b := alignToFrame(h.burst.snapshot()); len(b) > 0 {
+			s.ch <- b
+		}
 	}
 	h.subs[s] = struct{}{}
 	if client {

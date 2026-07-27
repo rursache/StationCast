@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"github.com/rursache/StationCast/internal/broadcast"
 )
 
 // Bitrate bounds accepted by libmp3lame, the encoder StationCast shells out to
@@ -33,6 +35,7 @@ type Config struct {
 	ITunesArt        bool
 	GainDB           int
 	MaxListeners     int
+	BurstSeconds     int
 	RecaptchaSiteKey string
 	RecaptchaSecret  string
 }
@@ -80,6 +83,12 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("invalid STATIONCAST_MAX_LISTENERS")
 	}
 	cfg.MaxListeners = maxL
+
+	burst, err := strconv.Atoi(env("STATIONCAST_BURST_SECONDS", strconv.Itoa(broadcast.DefaultBurstSeconds)))
+	if err != nil || burst < 0 || burst > broadcast.MaxBurstSeconds {
+		return nil, fmt.Errorf("invalid STATIONCAST_BURST_SECONDS: must be 0-%d", broadcast.MaxBurstSeconds)
+	}
+	cfg.BurstSeconds = burst
 
 	if cfg.AdminPassword == "" {
 		return nil, errors.New("STATIONCAST_ADMIN_PASSWORD is required")
