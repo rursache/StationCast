@@ -39,6 +39,11 @@ func Open(dataDir string) (*DB, error) {
 	return db, nil
 }
 
+// legacySchemaVersion is the highest migration that a pre-versioning database
+// already has applied. Databases from that era carry the schema but no rows in
+// schema_migrations, and re-running the ALTER TABLE statements would fail
+const legacySchemaVersion = 7
+
 type migration struct {
 	version int
 	sql     string
@@ -74,6 +79,10 @@ var migrations = []migration{
 		key   TEXT PRIMARY KEY,
 		value TEXT NOT NULL
 	)`},
+	// tracks.path is already UNIQUE, which SQLite backs with an implicit
+	// index, so migration 2 only bought a second copy to keep up to date on
+	// every insert and update. Dropping it costs no query performance
+	{8, `DROP INDEX IF EXISTS idx_tracks_path`},
 }
 
 func (db *DB) migrate() error {
@@ -95,6 +104,12 @@ func (db *DB) migrate() error {
 	if legacyTracks > 0 && applied == 0 {
 		now := time.Now().Unix()
 		for _, m := range migrations {
+			// Only the migrations that describe the pre-versioning schema are
+			// seeded. Anything added later still has to run against a legacy
+			// database, otherwise it would be skipped there forever
+			if m.version > legacySchemaVersion {
+				break
+			}
 			if _, err := db.Exec(`INSERT INTO schema_migrations(version, applied_at) VALUES(?, ?)`, m.version, now); err != nil {
 				return fmt.Errorf("seed schema_migrations: %w", err)
 			}
