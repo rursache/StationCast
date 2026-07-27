@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 	"unicode/utf8"
 
 	"github.com/rursache/StationCast/internal/config"
@@ -139,6 +140,87 @@ func TestWithinRoot(t *testing.T) {
 				t.Errorf("withinRoot(%q, %q) = %v, want %v", root, tc.path, got, tc.want)
 			}
 		})
+	}
+}
+
+func artTried(t *testing.T, lib *Library, id int64) int {
+	t.Helper()
+	var got int
+	if err := lib.db.QueryRow(`SELECT art_tried FROM tracks WHERE id = ?`, id).Scan(&got); err != nil {
+		t.Fatalf("read art_tried: %v", err)
+	}
+	return got
+}
+
+// Replacing the bytes behind an existing path can mean a different song, so
+// the artwork the previous lookup settled on no longer describes it. art_tried
+// used to survive the update, which left the startup batch skipping the track
+// permanently and only a play could ever correct the art
+func TestUpsertFileResetsArtTriedWhenContentChanges(t *testing.T) {
+	music := t.TempDir()
+	data := t.TempDir()
+	p := filepath.Join(music, "song.mp3")
+	if err := os.WriteFile(p, []byte("first recording"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	lib := newTestLibrary(t, music, data)
+	if err := lib.upsertFile(p); err != nil {
+		t.Fatalf("upsertFile: %v", err)
+	}
+	tr, ok := lib.GetByPath(p)
+	if !ok {
+		t.Fatal("track was not indexed")
+	}
+
+	// Stand in for a completed iTunes lookup
+	if _, err := lib.db.Exec(`UPDATE tracks SET art_tried = ? WHERE id = ?`, itunesLookupVersion, tr.ID); err != nil {
+		t.Fatal(err)
+	}
+	if got := artTried(t, lib, tr.ID); got != itunesLookupVersion {
+		t.Fatalf("setup failed, art_tried = %d", got)
+	}
+
+	// Same path, different content and a different size/mtime
+	if err := os.WriteFile(p, []byte("a completely different recording"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(p, time.Now().Add(time.Hour), time.Now().Add(time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	if err := lib.upsertFile(p); err != nil {
+		t.Fatalf("upsertFile after replacement: %v", err)
+	}
+
+	if got := artTried(t, lib, tr.ID); got != 0 {
+		t.Errorf("art_tried = %d after the file was replaced, want 0 so the lookup runs again", got)
+	}
+}
+
+// An unchanged file must not be re-examined, or every scan would undo the
+// work of the previous artwork run
+func TestUpsertFileLeavesArtTriedAloneWhenUnchanged(t *testing.T) {
+	music := t.TempDir()
+	data := t.TempDir()
+	p := filepath.Join(music, "song.mp3")
+	if err := os.WriteFile(p, []byte("recording"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	lib := newTestLibrary(t, music, data)
+	if err := lib.upsertFile(p); err != nil {
+		t.Fatalf("upsertFile: %v", err)
+	}
+	tr, _ := lib.GetByPath(p)
+	if _, err := lib.db.Exec(`UPDATE tracks SET art_tried = ? WHERE id = ?`, itunesLookupVersion, tr.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := lib.upsertFile(p); err != nil {
+		t.Fatalf("second upsertFile: %v", err)
+	}
+	if got := artTried(t, lib, tr.ID); got != itunesLookupVersion {
+		t.Errorf("art_tried = %d after a no-op rescan, want %d", got, itunesLookupVersion)
 	}
 }
 

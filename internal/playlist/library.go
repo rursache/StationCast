@@ -227,7 +227,11 @@ func (l *Library) upsertFile(path string) error {
 
 	now := time.Now().Unix()
 	if has {
-		_, err := l.db.Exec(`UPDATE tracks SET size=?, mtime=?, title=?, artist=?, album=?, duration_ms=?, has_art=? WHERE id=?`,
+		// art_tried resets because the bytes behind this path changed: it may
+		// be a different song now, and the artwork the previous lookup settled
+		// on no longer describes it. Leaving it set meant the startup batch
+		// skipped the track for good and only a play could ever correct it
+		_, err := l.db.Exec(`UPDATE tracks SET size=?, mtime=?, title=?, artist=?, album=?, duration_ms=?, has_art=?, art_tried=0 WHERE id=?`,
 			size, mt, nullStr(title), nullStr(artist), nullStr(album), dur, boolInt(hasArt), existing.ID)
 		if err != nil {
 			return err
