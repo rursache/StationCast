@@ -7,6 +7,8 @@ import (
 	"log/slog"
 	"os/exec"
 	"strings"
+	"sync/atomic"
+	"time"
 
 	"github.com/rursache/StationCast/internal/playlist"
 )
@@ -18,10 +20,12 @@ type pcmSource struct {
 	eng *Engine
 	ctx context.Context
 
-	curCmd *exec.Cmd
-	curOut io.ReadCloser
-	curErr *stderrPipe
-	curTrk *playlist.Track
+	curCmd   *exec.Cmd
+	curOut   io.ReadCloser
+	curErr   *stderrPipe
+	curTrk   *playlist.Track
+	curStop  chan struct{} // closed to retire the current track's stall watchdog
+	lastRead atomic.Int64  // unix nano of the most recent successful PCM read
 }
 
 func (s *pcmSource) Read(p []byte) (int, error) {
@@ -45,6 +49,14 @@ func (s *pcmSource) Read(p []byte) (int, error) {
 			s.curOut = out
 			s.curErr = errPipe
 			s.curTrk = t
+			s.curStop = make(chan struct{})
+			s.lastRead.Store(time.Now().UnixNano())
+			go watchStall(s.ctx, &s.lastRead, decoderStallTimeout, decoderStallTick, s.curStop, func() {
+				slog.Warn("decoder stalled, killing", "track", t.Path, "after", decoderStallTimeout)
+				if cmd.Process != nil {
+					_ = cmd.Process.Kill()
+				}
+			})
 			s.eng.mu.Lock()
 			s.eng.curCmd = cmd
 			s.eng.mu.Unlock()
@@ -62,13 +74,17 @@ func (s *pcmSource) Read(p []byte) (int, error) {
 		}
 		n, err := s.curOut.Read(p)
 		if n > 0 {
+			s.lastRead.Store(time.Now().UnixNano())
 			return n, nil
 		}
 		if err != nil {
+			close(s.curStop)
 			_ = s.curOut.Close()
 			// Reap the decoder process without blocking the PCM pump. A normal
-			// EOF + Wait returns immediately, but a wedged ffmpeg (eg corrupt
-			// file with a seek loop) could otherwise freeze every listener.
+			// EOF + Wait returns immediately, but a process that ignores the
+			// closed pipe would otherwise hold up the next track. This only
+			// covers reaping after the read has already ended; a decoder that
+			// hangs while still alive is handled by watchStall above.
 			// Fire-and-forget: exec.CommandContext is bound to s.ctx, so engine
 			// shutdown still kills the process
 			cmd := s.curCmd
@@ -87,6 +103,7 @@ func (s *pcmSource) Read(p []byte) (int, error) {
 			s.curCmd = nil
 			s.curErr = nil
 			s.curTrk = nil
+			s.curStop = nil
 			continue
 		}
 	}
