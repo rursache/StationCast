@@ -279,6 +279,105 @@ func TestUnsubscribeAfterCloseDoesNotPanic(t *testing.T) {
 	sub.Close()
 }
 
+// The HLS feeder is always subscribed, so counting the subscriber map
+// reported one phantom listener on every deployment even with nobody
+// connected, and quietly consumed a slot of the configured cap
+func TestListenersExcludesInternalSubscribers(t *testing.T) {
+	h := NewHub(128)
+
+	feeder, err := h.SubscribeInternal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := h.Listeners(); got != 0 {
+		t.Errorf("Listeners with only the HLS feeder = %d, want 0", got)
+	}
+
+	client := mustSubscribe(t, h)
+	if got := h.Listeners(); got != 1 {
+		t.Errorf("Listeners with one real client = %d, want 1", got)
+	}
+
+	client.Close()
+	if got := h.Listeners(); got != 0 {
+		t.Errorf("Listeners after the client left = %d, want 0", got)
+	}
+
+	// The feeder is still subscribed and must still receive audio
+	if _, err := h.Write([]byte{1, 2, 3}); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+	select {
+	case got := <-feeder.Chan():
+		if len(got) != 3 {
+			t.Errorf("feeder received %d bytes, want 3", len(got))
+		}
+	case <-time.After(time.Second):
+		t.Error("the HLS feeder stopped receiving audio")
+	}
+	feeder.Close()
+}
+
+// The cap is meant to bound real listeners. Charging the feeder against it
+// meant a station configured for N listeners only ever accepted N-1
+func TestCapacityIgnoresInternalSubscribers(t *testing.T) {
+	h := NewHub(128)
+	h.SetMaxListeners(2)
+
+	if _, err := h.SubscribeInternal(); err != nil {
+		t.Fatal(err)
+	}
+
+	a := mustSubscribe(t, h)
+	b := mustSubscribe(t, h)
+	if _, err := h.Subscribe(); !errors.Is(err, ErrAtCapacity) {
+		t.Errorf("third client error = %v, want ErrAtCapacity", err)
+	}
+
+	a.Close()
+	if _, err := h.Subscribe(); err != nil {
+		t.Errorf("a freed slot was not reusable: %v", err)
+	}
+	b.Close()
+}
+
+func TestListenersReturnsToZeroAfterClose(t *testing.T) {
+	h := NewHub(128)
+	mustSubscribe(t, h)
+	mustSubscribe(t, h)
+	if _, err := h.SubscribeInternal(); err != nil {
+		t.Fatal(err)
+	}
+
+	h.Close()
+	if got := h.Listeners(); got != 0 {
+		t.Errorf("Listeners after Close = %d, want 0", got)
+	}
+}
+
+// A dropped slow listener must decrement the count, or the admin figure
+// creeps upward for as long as the station runs
+func TestListenersDecrementsWhenSlowClientIsDropped(t *testing.T) {
+	h := NewHub(128)
+	sub := mustSubscribe(t, h)
+	if got := h.Listeners(); got != 1 {
+		t.Fatalf("Listeners = %d, want 1", got)
+	}
+
+	for i := 0; i < subBufferChunks+10; i++ {
+		_, _ = h.Write([]byte{byte(i)})
+	}
+
+	deadline := time.Now().Add(2 * time.Second)
+	for h.Listeners() != 0 && time.Now().Before(deadline) {
+		time.Sleep(5 * time.Millisecond)
+	}
+	if got := h.Listeners(); got != 0 {
+		t.Errorf("Listeners = %d after the slow client was dropped, want 0", got)
+	}
+	_ = sub
+}
+
 func TestListenersTracksSubscriberCount(t *testing.T) {
 	h := NewHub(128)
 	if got := h.Listeners(); got != 0 {

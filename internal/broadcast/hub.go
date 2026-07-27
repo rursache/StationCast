@@ -23,6 +23,10 @@ var (
 type Subscriber struct {
 	hub *Hub
 	ch  chan []byte
+	// client distinguishes a real listener from an in-process consumer such
+	// as the HLS feeder. Only clients count toward the listener figure and
+	// the configured cap
+	client bool
 }
 
 func (s *Subscriber) Chan() <-chan []byte { return s.ch }
@@ -35,9 +39,10 @@ type Hub struct {
 	bitrate      int
 	maxListeners int // 0 = unlimited
 
-	mu     sync.Mutex
-	subs   map[*Subscriber]struct{}
-	closed bool
+	mu      sync.Mutex
+	subs    map[*Subscriber]struct{}
+	clients int // subs excluding in-process consumers
+	closed  bool
 
 	meta atomic.Pointer[string]
 }
@@ -99,7 +104,7 @@ func (h *Hub) Subscribe() (*Subscriber, error) {
 }
 
 // SubscribeInternal is for in-process consumers (the HLS feeder) that must
-// not be subject to the listener cap
+// not be subject to the listener cap and must not show up as a listener
 func (h *Hub) SubscribeInternal() (*Subscriber, error) {
 	return h.subscribe(false)
 }
@@ -109,20 +114,27 @@ func (h *Hub) SubscribeInternal() (*Subscriber, error) {
 // already closed when the hub was shut down, but nil when the cap was hit, so
 // the only caller's nil check silently let the shutdown case through and
 // served a 200 with a body that ended immediately
-func (h *Hub) subscribe(capped bool) (*Subscriber, error) {
+func (h *Hub) subscribe(client bool) (*Subscriber, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if h.closed {
 		return nil, ErrHubClosed
 	}
-	if capped && h.maxListeners > 0 && len(h.subs) >= h.maxListeners {
+	// Counted against h.clients, not len(h.subs): the HLS feeder is always
+	// subscribed, so measuring the map charged every deployment one phantom
+	// listener and quietly cost a slot of the configured cap
+	if client && h.maxListeners > 0 && h.clients >= h.maxListeners {
 		return nil, ErrAtCapacity
 	}
 	s := &Subscriber{
-		hub: h,
-		ch:  make(chan []byte, subBufferChunks),
+		hub:    h,
+		ch:     make(chan []byte, subBufferChunks),
+		client: client,
 	}
 	h.subs[s] = struct{}{}
+	if client {
+		h.clients++
+	}
 	return s, nil
 }
 
@@ -133,6 +145,9 @@ func (h *Hub) unsubscribe(s *Subscriber) {
 		return
 	}
 	delete(h.subs, s)
+	if s.client {
+		h.clients--
+	}
 	h.mu.Unlock()
 	// Whoever won the delete above is the only one that closes, so this is
 	// safe against a concurrent Write dropping the same slow subscriber.
@@ -153,14 +168,17 @@ func (h *Hub) Close() {
 		subs = append(subs, s)
 	}
 	h.subs = map[*Subscriber]struct{}{}
+	h.clients = 0
 	h.mu.Unlock()
 	for _, s := range subs {
 		close(s.ch)
 	}
 }
 
+// Listeners reports how many real clients are connected. In-process
+// consumers such as the HLS feeder are excluded
 func (h *Hub) Listeners() int {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	return len(h.subs)
+	return h.clients
 }
