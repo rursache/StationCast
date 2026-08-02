@@ -1139,3 +1139,58 @@ func multipartUpload(t *testing.T, field, filename, content string) (body, conte
 	}
 	return sb.String(), w.FormDataContentType()
 }
+
+// The templates used to pull Tailwind from its Play CDN, which compiles CSS in
+// the browser and is documented as development-only. It also meant the admin
+// page could not render without internet access. The stylesheet is generated
+// and committed instead, so these guard the ways that can silently regress
+func TestTemplatesDoNotUseTheTailwindCDN(t *testing.T) {
+	for _, name := range []string{"admin.html", "login.html", "public.html"} {
+		body, err := templatesFS.ReadFile("templates/" + name)
+		if err != nil {
+			t.Fatalf("read %s: %v", name, err)
+		}
+		if strings.Contains(string(body), "cdn.tailwindcss.com") {
+			t.Errorf("%s loads Tailwind from the CDN, which compiles in the browser and needs internet", name)
+		}
+		if !strings.Contains(string(body), "/static/tailwind.css") {
+			t.Errorf("%s does not link the generated stylesheet, so it will render unstyled", name)
+		}
+	}
+}
+
+func TestGeneratedStylesheetIsEmbedded(t *testing.T) {
+	css, ok := staticFiles["tailwind.css"]
+	if !ok {
+		t.Fatal("tailwind.css is missing from the embedded static set")
+	}
+	if len(css) < 5000 {
+		t.Errorf("tailwind.css is only %d bytes, which suggests a failed or empty build", len(css))
+	}
+
+	// Utilities the layout depends on, including an arbitrary value and a data
+	// variant, since those are the ones a scanner misconfiguration drops first
+	for _, want := range []string{
+		".bg-neutral-950",
+		".backdrop-blur",
+		".animate-ping",
+		"text-\\[11px\\]",
+		"data-\\[active\\=true\\]",
+	} {
+		if !strings.Contains(string(css), want) {
+			t.Errorf("generated stylesheet is missing %q, regenerate it per CLAUDE.md", want)
+		}
+	}
+}
+
+func TestStylesheetIsServedOverHTTP(t *testing.T) {
+	env := newTestEnv(t)
+	rec := env.get(t, "/static/tailwind.css")
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	if ct := rec.Header().Get("Content-Type"); ct != "text/css; charset=utf-8" {
+		t.Errorf("Content-Type = %q", ct)
+	}
+}

@@ -79,6 +79,25 @@ The filesystem at `STATIONCAST_MUSIC_DIR` is canonical. SQLite is just an index 
 4. Wire it into the relevant component constructor or call site
 5. Log it in the `starting` slog line in `cmd/stationcast/main.go` so misconfiguration is visible
 
+## Regenerating the CSS
+
+`internal/httpx/static/tailwind.css` is a generated file, committed so the
+binary stays self-contained and the templates render without internet access.
+It replaced the Tailwind Play CDN, which compiles in the browser and is
+documented as development-only.
+
+Regenerate it after adding or changing any Tailwind class in a template or in
+`static/*.js`, since unused classes are stripped at build time and a class that
+was never scanned simply will not have a rule:
+
+```sh
+npx -y tailwindcss@3 -c tailwind.config.js -i tailwind.input.css \
+  -o internal/httpx/static/tailwind.css --minify
+```
+
+Classes only ever produced at runtime by string concatenation will not be found
+by the scanner. Write them out in full so they appear literally in the source
+
 ## Testing
 
 - `go test ./...` runs unit tests including the unicode filename roundtrip
