@@ -230,9 +230,19 @@ func (l *Library) lookupLyrics(ctx context.Context, t *Track) (*lrclibResponse, 
 	}
 	note(err)
 
-	// lyrics.ovh last, plain text only, but it indexes a different catalogue
+	// lyrics.ovh next, plain text only, but it indexes a different catalogue
 	for _, artist := range credits {
 		res, err := l.queryLyricsOvh(ctx, artist, title)
+		if err == nil {
+			return res, nil
+		}
+		note(err)
+	}
+
+	// versuri.ro last, since it is scraped rather than an API. It carries
+	// Romanian music the other two miss outright
+	for _, artist := range credits {
+		res, err := l.queryVersuri(ctx, artist, title)
 		if err == nil {
 			return res, nil
 		}

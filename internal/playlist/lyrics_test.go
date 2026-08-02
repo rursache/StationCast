@@ -378,9 +378,29 @@ func TestPickLyricsCandidate(t *testing.T) {
 // duration of a test
 func pointProviders(t *testing.T, get, search, ovh string) {
 	t.Helper()
-	og, os_, oo := lrclibGetURL, lrclibSearchURL, lyricsOvhURL
-	lrclibGetURL, lrclibSearchURL, lyricsOvhURL = get, search, ovh
-	t.Cleanup(func() { lrclibGetURL, lrclibSearchURL, lyricsOvhURL = og, os_, oo })
+	// Every provider is redirected, including the ones a given test does not
+	// care about. Leaving one pointed at its real endpoint means the chain
+	// quietly reaches the live internet once the earlier providers miss
+	pointAllProviders(t, get, search, ovh, unreachableProvider(t))
+}
+
+// pointAllProviders redirects the whole chain, versuri.ro included
+func pointAllProviders(t *testing.T, get, search, ovh, versuri string) {
+	t.Helper()
+	og, os_, oo, ov := lrclibGetURL, lrclibSearchURL, lyricsOvhURL, versuriBaseURL
+	lrclibGetURL, lrclibSearchURL, lyricsOvhURL, versuriBaseURL = get, search, ovh, versuri
+	t.Cleanup(func() {
+		lrclibGetURL, lrclibSearchURL, lyricsOvhURL, versuriBaseURL = og, os_, oo, ov
+	})
+}
+
+// unreachableProvider stands in for a provider a test does not exercise: it
+// always answers "no match", so the chain moves on without touching the network
+func unreachableProvider(t *testing.T) string {
+	t.Helper()
+	return lyricsTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	})
 }
 
 func lyricsTestServer(t *testing.T, h http.HandlerFunc) string {
@@ -949,5 +969,97 @@ func TestWriteLyricsFailsWhenDirectoryCannotBeCreated(t *testing.T) {
 	}
 	if err := writeLyrics(data, 1, "words"); err == nil {
 		t.Error("writeLyrics reported success despite being unable to create its directory")
+	}
+}
+
+// The provider order is a quality order: only LRCLIB returns timings, so a
+// later provider must never be reached when an earlier one can answer
+func TestProviderOrderIsQualityOrder(t *testing.T) {
+	var ovhCalled, versuriCalled bool
+	lrclib := lyricsTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"trackName": "Yellow", "duration": 267.0, "syncedLyrics": "[00:01.00]synced",
+		})
+	})
+	ovh := lyricsTestServer(t, func(w http.ResponseWriter, r *http.Request) { ovhCalled = true })
+	versuri := lyricsTestServer(t, func(w http.ResponseWriter, r *http.Request) { versuriCalled = true })
+	pointAllProviders(t, lrclib+"/get", lrclib+"/search", ovh, versuri)
+
+	lib := &Library{}
+	res, err := lib.lookupLyrics(context.Background(), &Track{Artist: "Coldplay", Title: "Yellow"})
+	if err != nil {
+		t.Fatalf("lookupLyrics: %v", err)
+	}
+	if res.source != "lrclib" {
+		t.Errorf("answered by %q, want lrclib", res.source)
+	}
+	if ovhCalled || versuriCalled {
+		t.Errorf("a later provider was called despite lrclib answering (ovh=%v versuri=%v)", ovhCalled, versuriCalled)
+	}
+}
+
+// versuri.ro is last, so it is only reached once both of the others miss
+func TestVersuriReachedOnlyAfterOthersMiss(t *testing.T) {
+	miss := lyricsTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, "search") {
+			_, _ = w.Write([]byte("[]"))
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	})
+	versuri := lyricsTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`<div id="textdiv">O blonda cu paru ondulat</div>`))
+	})
+	pointAllProviders(t, miss+"/get", miss+"/search", miss, versuri)
+
+	lib := &Library{}
+	res, err := lib.lookupLyrics(context.Background(), &Track{Artist: "Florin Peste", Title: "Ce Blonda Tare"})
+	if err != nil {
+		t.Fatalf("lookupLyrics: %v", err)
+	}
+	if res.source != "versuri.ro" {
+		t.Errorf("answered by %q, want versuri.ro", res.source)
+	}
+	if res.SyncedLyrics != "" {
+		t.Error("the scraped provider claimed synced lyrics")
+	}
+}
+
+// All three missing is definitive, so the track is not asked for on every play
+func TestAllThreeProvidersMissing(t *testing.T) {
+	miss := lyricsTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, "search") {
+			_, _ = w.Write([]byte("[]"))
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	})
+	pointAllProviders(t, miss+"/get", miss+"/search", miss, miss)
+
+	lib := &Library{}
+	if _, err := lib.lookupLyrics(context.Background(), &Track{Artist: "A", Title: "B"}); !errors.Is(err, errNoLyricsMatch) {
+		t.Errorf("error = %v, want errNoLyricsMatch", err)
+	}
+}
+
+// Only the last provider being down still leaves the track retryable, since
+// it might have had the lyrics
+func TestLastProviderOutageKeepsTrackRetryable(t *testing.T) {
+	miss := lyricsTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, "search") {
+			_, _ = w.Write([]byte("[]"))
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	})
+	down := lyricsTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	})
+	pointAllProviders(t, miss+"/get", miss+"/search", miss, down)
+
+	lib := &Library{}
+	_, err := lib.lookupLyrics(context.Background(), &Track{Artist: "A", Title: "B"})
+	if err == nil || errors.Is(err, errNoLyricsMatch) {
+		t.Errorf("error = %v, want a transient error", err)
 	}
 }
