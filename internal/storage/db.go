@@ -83,6 +83,8 @@ var migrations = []migration{
 	// index, so migration 2 only bought a second copy to keep up to date on
 	// every insert and update. Dropping it costs no query performance
 	{8, `DROP INDEX IF EXISTS idx_tracks_path`},
+	{9, `ALTER TABLE tracks ADD COLUMN has_lyrics INTEGER NOT NULL DEFAULT 0`},
+	{10, `ALTER TABLE tracks ADD COLUMN lyrics_tried INTEGER NOT NULL DEFAULT 0`},
 }
 
 func (db *DB) migrate() error {

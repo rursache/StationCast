@@ -120,8 +120,13 @@ func (s *pcmSource) read(p []byte) (int, error) {
 			// per song, so rapid Skip events do not burst the API
 			go s.eng.lib.RefreshArt(s.ctx, t)
 			// Lazy-fill the track's duration via ffprobe if missing so the
-			// admin progress label has a total to render against
-			go s.eng.lib.EnsureDuration(t)
+			// admin progress label has a total to render against, then look
+			// up lyrics. Sequential because LRCLIB matches on duration, so
+			// asking before ffprobe has filled it in gives a weaker match
+			go func() {
+				s.eng.lib.EnsureDuration(t)
+				s.eng.lib.FetchLyrics(s.ctx, t)
+			}()
 		}
 		n, err := s.curOut.Read(p)
 		if n > 0 {

@@ -90,3 +90,170 @@ function connectSSE(url, onMessage) {
     es.onerror = () => { es.close(); setTimeout(connect, 3000); };
   })();
 }
+
+// --- Lyrics -----------------------------------------------------------
+// Lyrics arrive as LRC when a synced version exists and as plain text
+// otherwise, so the format is detected rather than declared.
+
+// parseLyrics turns a body into ordered lines. `synced` is false when no
+// timestamp was found, in which case the lines are just text to scroll.
+// A line may carry several timestamps (a repeated chorus), which becomes one
+// entry per occurrence. Metadata tags like [ar:...] are dropped
+function parseLyrics(text) {
+  const lines = [];
+  let synced = false;
+  // Normalise line endings first. A trailing \r would defeat the `$` anchor
+  // below and silently turn every line of a CRLF file into plain text
+  for (const raw of (text || '').replace(/\r\n?/g, '\n').split('\n')) {
+    const m = raw.match(/^((?:\[\d+:\d+(?:[.:]\d+)?\])+)(.*)$/);
+    if (m) {
+      synced = true;
+      const body = m[2].trim();
+      for (const ts of m[1].matchAll(/\[(\d+):(\d+(?:[.:]\d+)?)\]/g)) {
+        lines.push({ t: parseInt(ts[1], 10) * 60 + parseFloat(ts[2].replace(':', '.')), text: body });
+      }
+    } else if (!/^\[(ti|ar|al|au|by|re|ve|length|offset|tool|encoder):/i.test(raw)) {
+      // Blank lines are kept so stanza breaks survive in plain lyrics
+      lines.push({ t: null, text: raw.trim() });
+    }
+  }
+  if (synced) {
+    // Mixing untimed lines into a synced document breaks the binary search
+    // invariant, so they are dropped rather than sorted to an arbitrary spot
+    const timed = lines.filter(l => l.t !== null);
+    timed.sort((a, b) => a.t - b.t);
+    return { synced, lines: timed };
+  }
+  return { synced, lines };
+}
+
+// activeLyricIndex finds the last line due at or before `pos`, by binary
+// search so it stays cheap when called every second
+function activeLyricIndex(lines, pos) {
+  let lo = 0, hi = lines.length - 1, found = -1;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    if (lines[mid].t !== null && lines[mid].t <= pos) { found = mid; lo = mid + 1; }
+    else { hi = mid - 1; }
+  }
+  return found;
+}
+
+// A listener hears audio several seconds after the server sent it: the
+// connect burst, the browser's own jitter buffer, and for HLS the segment
+// length all stack up, and the total differs per listener and per device.
+// There is no browser API that reports it, so the default is an estimate and
+// the listener can correct it. Kept per browser, like the volume setting
+const LYRICS_OFFSET_KEY = 'stationcast.lyricsOffset';
+const LYRICS_OFFSET_DEFAULT = 5;
+const LYRICS_OFFSET_MIN = -5;
+const LYRICS_OFFSET_MAX = 30;
+
+function getLyricsOffset() {
+  // Reading storage can throw outright, not just return null, in a sandboxed
+  // frame or with storage disabled. This runs during page setup, so an
+  // exception here would take everything wired after it down with it
+  try {
+    const v = parseFloat(localStorage.getItem(LYRICS_OFFSET_KEY));
+    return Number.isFinite(v) ? Math.min(LYRICS_OFFSET_MAX, Math.max(LYRICS_OFFSET_MIN, v)) : LYRICS_OFFSET_DEFAULT;
+  } catch {
+    return LYRICS_OFFSET_DEFAULT;
+  }
+}
+function setLyricsOffset(v) {
+  const c = Math.min(LYRICS_OFFSET_MAX, Math.max(LYRICS_OFFSET_MIN, v));
+  try { localStorage.setItem(LYRICS_OFFSET_KEY, String(c)); } catch {}
+  return c;
+}
+
+// initLyrics wires a lyrics button, modal and offset control. `getNowPlaying`
+// returns the latest now-playing payload so the view can follow track changes
+// and compute elapsed time from started_at
+function initLyrics(els, getNowPlaying) {
+  if (!els.button || !els.modal || !els.body) return null;
+
+  let parsed = null;
+  let loadedUrl = null;
+  let activeIdx = -1;
+  let offset = getLyricsOffset();
+
+  function renderOffset() {
+    if (els.offsetLabel) els.offsetLabel.textContent = offset.toFixed(1) + 's';
+  }
+
+  function render() {
+    if (!parsed) return;
+    els.body.innerHTML = parsed.lines
+      .map((l, i) => `<p class="lyric-line${l.text ? '' : ' lyric-blank'}" data-i="${i}">${escapeHTML(l.text)}</p>`)
+      .join('');
+    activeIdx = -1;
+    if (els.syncControls) els.syncControls.classList.toggle('hidden', !parsed.synced);
+  }
+
+  function highlight() {
+    if (!parsed || !parsed.synced) return;
+    const np = getNowPlaying();
+    if (!np || !np.started_at) return;
+    const pos = Date.now() / 1000 - np.started_at - offset;
+    const idx = activeLyricIndex(parsed.lines, pos);
+    if (idx === activeIdx) return;
+    activeIdx = idx;
+    const nodes = els.body.querySelectorAll('.lyric-line');
+    nodes.forEach((n, i) => n.classList.toggle('lyric-active', i === idx));
+    const cur = nodes[idx];
+    if (cur && els.modal.classList.contains('flex')) {
+      cur.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    }
+  }
+
+  // Guards against a slow request for a previous track resolving after a
+  // faster one for the current track and overwriting it
+  let loadSeq = 0;
+
+  async function load(url) {
+    if (!url || url === loadedUrl) return;
+    const seq = ++loadSeq;
+    try {
+      const r = await fetch(url, { credentials: 'same-origin' });
+      if (!r.ok) throw new Error('no lyrics');
+      const text = await r.text();
+      if (seq !== loadSeq) return; // a newer track won, discard this one
+      parsed = parseLyrics(text);
+      loadedUrl = url;
+      render();
+    } catch {
+      if (seq !== loadSeq) return;
+      parsed = null;
+      loadedUrl = null;
+      els.body.innerHTML = `<p class="text-neutral-500 italic">Could not load lyrics</p>`;
+    }
+  }
+
+  // Only offered when the server actually has lyrics for this track
+  function sync(np) {
+    const has = !!(np && np.has_lyrics && np.lyrics_url);
+    els.button.classList.toggle('hidden', !has);
+    if (!has) {
+      closeModal(els.modal);
+      parsed = null;
+      loadedUrl = null;
+      return;
+    }
+    if (np.lyrics_url !== loadedUrl) load(np.lyrics_url);
+  }
+
+  els.button.addEventListener('click', async () => {
+    const np = getNowPlaying();
+    if (np && np.lyrics_url) await load(np.lyrics_url);
+    openModal(els.modal);
+    highlight();
+  });
+
+  const nudge = d => () => { offset = setLyricsOffset(offset + d); renderOffset(); activeIdx = -1; highlight(); };
+  els.minus?.addEventListener('click', nudge(-0.5));
+  els.plus?.addEventListener('click', nudge(0.5));
+
+  renderOffset();
+  setInterval(highlight, 500);
+  return { sync };
+}

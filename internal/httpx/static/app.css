@@ -61,3 +61,18 @@ select option {
   outline-offset: 2px;
   border-radius: 4px;
 }
+
+/* Lyrics. Inactive lines stay legible rather than dimmed to nothing, so the
+   view still reads as lyrics when there is no synced version to highlight */
+.lyric-line {
+  padding: 0.3rem 0;
+  color: #737373;
+  transition: color 160ms ease, transform 160ms ease;
+}
+.lyric-blank { min-height: 0.75rem; }
+/* The highlight is a soft colour change rather than a hard snap: the sync can
+   be a second or so out and a sharp transition makes that far more obvious */
+.lyric-active {
+  color: #fafafa;
+  font-weight: 600;
+}

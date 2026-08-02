@@ -43,6 +43,7 @@ func (s *Server) handleLibraryJSON(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleLoginPage(w http.ResponseWriter, r *http.Request) {
 	s.tmpl.Render(w, "login.html", map[string]any{
 		"StationName":      s.cfg.StationName,
+		"Version":          s.cfg.Version,
 		"RecaptchaSiteKey": s.cfg.RecaptchaSiteKey,
 	})
 }

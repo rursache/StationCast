@@ -60,6 +60,7 @@ func NewRouter(cfg *config.Config, db *storage.DB, lib *playlist.Library, sched 
 	r.Get("/now-playing/sse", s.handleNowPlayingSSE)
 	r.Get("/history", s.handleHistoryJSON)
 	r.Get("/art/{id}", s.handleArt)
+	r.Get("/lyrics/{id}", s.handleLyrics)
 	r.Get("/static/*", s.handleStatic)
 
 	r.Get("/stream", s.handleStream)
@@ -107,8 +108,8 @@ func readTimeout(d time.Duration) func(http.Handler) http.Handler {
 }
 
 // securityHeaders applies a small set of conservative defaults to every
-// response. CSP is omitted for now because admin templates load Tailwind from
-// a public CDN
+// response. A CSP is not set yet, but nothing is loaded cross-origin any
+// more now that the stylesheet ships with the binary, so one is now viable
 func securityHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		h := w.Header()

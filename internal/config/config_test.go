@@ -175,3 +175,32 @@ func TestBitrateBoundsAreSane(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestLoadLyricsToggle(t *testing.T) {
+	cases := []struct {
+		value string
+		want  bool
+	}{
+		{"", true}, // on by default, like the artwork integration
+		{"true", true},
+		{"1", true},
+		{"false", false},
+		{"0", false},
+		{"off", false},
+		{"nonsense", true}, // unparseable falls back to the default
+	}
+	for _, tc := range cases {
+		t.Run(tc.value, func(t *testing.T) {
+			setBaseEnv(t)
+			t.Setenv("STATIONCAST_LYRICS", tc.value)
+
+			cfg, err := Load()
+			if err != nil {
+				t.Fatalf("Load(): %v", err)
+			}
+			if cfg.Lyrics != tc.want {
+				t.Errorf("Lyrics for %q = %v, want %v", tc.value, cfg.Lyrics, tc.want)
+			}
+		})
+	}
+}

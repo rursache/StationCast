@@ -8,8 +8,8 @@
   <meta name="theme-color" content="#0a0a0a">
   <title>{{.StationName}}</title>
   <link rel="icon" type="image/svg+xml" href="/static/icon.svg">
-  <link rel="stylesheet" href="/static/tailwind.css">
-  <link rel="stylesheet" href="/static/app.css">
+  <link rel="stylesheet" href="/static/tailwind.css?v={{.Version}}">
+  <link rel="stylesheet" href="/static/app.css?v={{.Version}}">
 </head>
 <body class="h-screen overflow-hidden">
 
@@ -54,7 +54,7 @@
       </button>
     </div>
 
-    <div class="w-full max-w-sm flex items-center gap-3">
+    <div class="w-full max-w-lg flex items-center gap-3">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-4 h-4 text-neutral-500"><path stroke-linecap="round" stroke-linejoin="round" d="M5 9v6h4l5 5V4L9 9H5z"/></svg>
       <input id="vol" type="range" min="0" max="100" value="100" class="flex-1 accent-white">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-4 h-4 text-neutral-500"><path stroke-linecap="round" stroke-linejoin="round" d="M5 9v6h4l5 5V4L9 9H5zM15.54 8.46a5 5 0 010 7.07M19.07 4.93a10 10 0 010 14.14"/></svg>
@@ -76,13 +76,17 @@
     </div>
 
     <div class="w-full max-w-sm flex items-center gap-3">
-      <button id="open-streams" type="button" class="flex-1 inline-flex items-center justify-center gap-2 bg-neutral-900/40 hover:bg-neutral-900/70 backdrop-blur border border-neutral-800 rounded-xl px-4 py-2.5 text-sm text-neutral-200 transition">
+      <button id="open-streams" type="button" class="flex-1 inline-flex items-center justify-center gap-2 whitespace-nowrap bg-neutral-900/40 hover:bg-neutral-900/70 backdrop-blur border border-neutral-800 rounded-xl px-3 py-2.5 text-sm text-neutral-200 transition">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-4 h-4"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h7"/></svg>
         Stream Links
       </button>
-      <button id="open-history" type="button" class="flex-1 inline-flex items-center justify-center gap-2 bg-neutral-900/40 hover:bg-neutral-900/70 backdrop-blur border border-neutral-800 rounded-xl px-4 py-2.5 text-sm text-neutral-200 transition">
+      <button id="open-history" type="button" class="flex-1 inline-flex items-center justify-center gap-2 whitespace-nowrap bg-neutral-900/40 hover:bg-neutral-900/70 backdrop-blur border border-neutral-800 rounded-xl px-3 py-2.5 text-sm text-neutral-200 transition">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-4 h-4"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 2M12 21a9 9 0 100-18 9 9 0 000 18z"/></svg>
         History
+      </button>
+      <button id="open-lyrics" type="button" class="hidden flex-1 inline-flex items-center justify-center gap-2 whitespace-nowrap bg-neutral-900/40 hover:bg-neutral-900/70 backdrop-blur border border-neutral-800 rounded-xl px-3 py-2.5 text-sm text-neutral-200 transition">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-4 h-4"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h10M4 18h13"/></svg>
+        Lyrics
       </button>
     </div>
   </main>
@@ -127,8 +131,30 @@
     </div>
   </div>
 
+
+<div id="modal-lyrics" class="hidden fixed inset-0 z-50 items-center justify-center p-4">
+  <div class="modal-backdrop absolute inset-0 bg-black/70 backdrop-blur-sm"></div>
+  <div class="relative bg-neutral-900 border border-neutral-800 rounded-2xl w-full max-w-lg max-h-[80vh] flex flex-col shadow-2xl">
+    <div class="flex items-center justify-between px-5 py-4 border-b border-neutral-800 flex-shrink-0">
+      <h3 class="font-semibold">Lyrics</h3>
+      <div class="flex items-center gap-3">
+        <div id="lyrics-sync" class="hidden items-center gap-1 text-xs text-neutral-500">
+          <span class="hidden sm:inline">sync</span>
+          <button id="lyrics-minus" type="button" class="w-6 h-6 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-300 transition" title="Lyrics are ahead, delay them" aria-label="Delay lyrics">&minus;</button>
+          <span id="lyrics-offset" class="font-mono text-neutral-400 w-10 text-center">5.0s</span>
+          <button id="lyrics-plus" type="button" class="w-6 h-6 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-300 transition" title="Lyrics are behind, advance them" aria-label="Advance lyrics">+</button>
+        </div>
+        <button class="modal-close text-neutral-500 hover:text-white transition" aria-label="Close">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-5 h-5"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      </div>
+    </div>
+    <div id="lyrics-body" class="overflow-y-auto px-5 py-4 text-center leading-relaxed"></div>
+  </div>
+</div>
+
   <audio id="player" preload="none" crossorigin="anonymous"></audio>
-  <script src="/static/utils.js"></script>
-  <script src="/static/app.js"></script>
+  <script src="/static/utils.js?v={{.Version}}"></script>
+  <script src="/static/app.js?v={{.Version}}"></script>
 </body>
 </html>{{end}}

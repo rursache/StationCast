@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{.StationName}} - Admin</title>
   <link rel="icon" type="image/svg+xml" href="/static/icon.svg">
-  <link rel="stylesheet" href="/static/tailwind.css">
+  <link rel="stylesheet" href="/static/tailwind.css?v={{.Version}}">
   {{if .RecaptchaSiteKey}}<script src="https://www.google.com/recaptcha/api.js?render={{.RecaptchaSiteKey}}"></script>{{end}}
 </head>
 <body class="min-h-screen flex items-center justify-center p-6">

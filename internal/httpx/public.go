@@ -3,6 +3,7 @@ package httpx
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"path/filepath"
 	"strconv"
@@ -18,6 +19,8 @@ type nowPlaying struct {
 	Album       string `json:"album"`
 	HasArt      bool   `json:"has_art"`
 	ArtURL      string `json:"art_url,omitempty"`
+	HasLyrics   bool   `json:"has_lyrics"`
+	LyricsURL   string `json:"lyrics_url,omitempty"`
 	DurationMS  int64  `json:"duration_ms,omitempty"`
 	StartedAt   int64  `json:"started_at,omitempty"`
 	NextTitle   string `json:"next_title,omitempty"`
@@ -40,6 +43,11 @@ func (s *Server) currentNowPlaying() nowPlaying {
 		np.StartedAt = s.sched.CurrentStartedAt()
 		if t.HasArt {
 			np.ArtURL = "/art/" + strconv.FormatInt(t.ID, 10)
+		}
+		// Drives whether the frontend offers the lyrics button at all
+		np.HasLyrics = t.HasLyrics
+		if t.HasLyrics {
+			np.LyricsURL = "/lyrics/" + strconv.FormatInt(t.ID, 10)
 		}
 	}
 	if next := s.sched.Peek(); next != nil {
@@ -165,6 +173,7 @@ func (s *Server) handlePublicHome(w http.ResponseWriter, r *http.Request) {
 	type streamRow struct{ Label, URL string }
 	data := map[string]any{
 		"StationName": s.cfg.StationName,
+		"Version":     s.cfg.Version,
 		"StreamRows": []streamRow{
 			{"Direct", s.streamURL(r, "/stream")},
 			{"PLS", s.streamURL(r, "/stream.pls")},
@@ -196,4 +205,32 @@ func (s *Server) handleStatic(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Cache-Control", "public, max-age=300")
 	w.Write(data)
+}
+
+// handleLyrics serves a track's cached lyrics. The body is LRC when a synced
+// version was found and plain text otherwise, which the frontend tells apart
+// by looking for timestamps. Nothing is fetched here: the cache is filled when
+// a track starts playing, so a listener never waits on a third party
+func (s *Server) handleLyrics(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	t, ok := s.lib.Get(id)
+	if !ok || !t.HasLyrics {
+		http.NotFound(w, r)
+		return
+	}
+	body, err := s.lib.ReadLyrics(id)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	// A file replaced at the same path keeps its track id and gets fresh
+	// lyrics written to the same URL, so this has to revalidate rather than
+	// serve the previous song's words for a day. Same reasoning as artwork
+	w.Header().Set("Cache-Control", "public, max-age=0, must-revalidate")
+	_, _ = io.WriteString(w, body)
 }

@@ -1194,3 +1194,113 @@ func TestStylesheetIsServedOverHTTP(t *testing.T) {
 		t.Errorf("Content-Type = %q", ct)
 	}
 }
+
+func TestLyricsNotFoundWhenNoneCached(t *testing.T) {
+	env := newTestEnv(t, "song.mp3")
+	id := env.trackID(t, "song.mp3")
+
+	for _, path := range []string{
+		"/lyrics/999999",
+		"/lyrics/" + strconv.FormatInt(id, 10), // indexed but has_lyrics is false
+		"/lyrics/notanumber",
+	} {
+		t.Run(path, func(t *testing.T) {
+			if got := env.get(t, path).Code; got != http.StatusNotFound {
+				t.Errorf("status = %d, want 404", got)
+			}
+		})
+	}
+}
+
+func TestLyricsServedFromCache(t *testing.T) {
+	env := newTestEnv(t, "song.mp3")
+	id := env.trackID(t, "song.mp3")
+	tr, _ := env.lib.Get(id)
+	tr.HasLyrics = true
+
+	body := "[00:12.30] first line\n[00:15.00] second line\n"
+	dir := filepath.Join(env.data, "lyrics")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, strconv.FormatInt(id, 10)+".lrc"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	rec := env.get(t, "/lyrics/"+strconv.FormatInt(id, 10))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	if rec.Body.String() != body {
+		t.Errorf("body = %q, want %q", rec.Body.String(), body)
+	}
+	if ct := rec.Header().Get("Content-Type"); ct != "text/plain; charset=utf-8" {
+		t.Errorf("Content-Type = %q", ct)
+	}
+	// A file replaced at the same path keeps its id and gets fresh lyrics at
+	// the same URL, so this must revalidate rather than serve the previous
+	// song's words for a day
+	if cc := rec.Header().Get("Cache-Control"); !strings.Contains(cc, "must-revalidate") {
+		t.Errorf("Cache-Control = %q, want must-revalidate so replaced tracks propagate", cc)
+	}
+}
+
+// The frontend decides whether to offer the button from these fields, so a
+// track with no lyrics must not advertise a URL
+func TestNowPlayingAdvertisesLyricsOnlyWhenPresent(t *testing.T) {
+	env := newTestEnv(t, "song.mp3")
+	tr, _ := env.lib.Get(env.trackID(t, "song.mp3"))
+	env.sched.MarkPlaying(tr)
+
+	var np nowPlaying
+	if err := json.Unmarshal(env.get(t, "/now-playing").Body.Bytes(), &np); err != nil {
+		t.Fatal(err)
+	}
+	if np.HasLyrics {
+		t.Error("HasLyrics is set for a track with no cached lyrics")
+	}
+	if np.LyricsURL != "" {
+		t.Errorf("LyricsURL = %q, want empty", np.LyricsURL)
+	}
+
+	tr.HasLyrics = true
+	if err := json.Unmarshal(env.get(t, "/now-playing").Body.Bytes(), &np); err != nil {
+		t.Fatal(err)
+	}
+	if !np.HasLyrics {
+		t.Error("HasLyrics not set for a track that has lyrics")
+	}
+	if np.LyricsURL != "/lyrics/"+strconv.FormatInt(tr.ID, 10) {
+		t.Errorf("LyricsURL = %q", np.LyricsURL)
+	}
+}
+
+// The stylesheet is generated and shipped with the binary now, so a stale
+// cached copy renders new markup with no rules at all. Static URLs carry the
+// build version so an upgrade busts the cache immediately
+func TestStaticAssetsAreVersionStamped(t *testing.T) {
+	env := newTestEnv(t)
+
+	pages := map[string]func() string{
+		"/":            func() string { return env.get(t, "/").Body.String() },
+		"/admin/login": func() string { return env.get(t, "/admin/login").Body.String() },
+		"/admin/":      func() string { return env.authed(t, http.MethodGet, "/admin/", nil).Body.String() },
+	}
+	for path, body := range pages {
+		t.Run(path, func(t *testing.T) {
+			html := body()
+			for _, asset := range []string{"/static/tailwind.css", "/static/app.css"} {
+				if !strings.Contains(html, asset) {
+					continue // not every page links every asset
+				}
+				want := asset + "?v=" + env.cfg.Version
+				if !strings.Contains(html, want) {
+					t.Errorf("%s links %s without the version stamp, so an upgrade serves stale CSS", path, asset)
+				}
+			}
+			if strings.Contains(html, `.css"`) && !strings.Contains(html, "?v=") {
+				t.Errorf("%s has an unstamped stylesheet link", path)
+			}
+		})
+	}
+}

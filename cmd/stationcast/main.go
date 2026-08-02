@@ -44,6 +44,7 @@ func main() {
 		"gain_db", cfg.GainDB,
 		"max_listeners", cfg.MaxListeners,
 		"burst_seconds", cfg.BurstSeconds,
+		"lyrics", cfg.Lyrics,
 		"recaptcha", cfg.RecaptchaSiteKey != "",
 	)
 

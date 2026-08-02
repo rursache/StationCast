@@ -70,6 +70,10 @@ type Library struct {
 	// songKey, value is time.Time. Songs that re-fire within
 	// refreshThrottle (eg user spamming Skip) reuse the prior result
 	lastRefresh sync.Map
+
+	// lyricsInflight guards against two lookups for the same track running at
+	// once, keyed by track id
+	lyricsInflight sync.Map
 }
 
 func NewLibrary(cfg *config.Config, db *storage.DB) *Library {
@@ -155,7 +159,7 @@ func (l *Library) InitialScan(ctx context.Context) error {
 }
 
 func (l *Library) loadFromDB() error {
-	rows, err := l.db.Query(`SELECT id, path, size, mtime, COALESCE(title,''), COALESCE(artist,''), COALESCE(album,''), COALESCE(duration_ms,0), has_art, added_at FROM tracks`)
+	rows, err := l.db.Query(`SELECT id, path, size, mtime, COALESCE(title,''), COALESCE(artist,''), COALESCE(album,''), COALESCE(duration_ms,0), has_art, has_lyrics, added_at FROM tracks`)
 	if err != nil {
 		return err
 	}
@@ -164,11 +168,12 @@ func (l *Library) loadFromDB() error {
 	defer l.mu.Unlock()
 	for rows.Next() {
 		t := &Track{}
-		var hasArt int64
-		if err := rows.Scan(&t.ID, &t.Path, &t.Size, &t.MTime, &t.Title, &t.Artist, &t.Album, &t.DurationMS, &hasArt, &t.AddedAt); err != nil {
+		var hasArt, hasLyrics int64
+		if err := rows.Scan(&t.ID, &t.Path, &t.Size, &t.MTime, &t.Title, &t.Artist, &t.Album, &t.DurationMS, &hasArt, &hasLyrics, &t.AddedAt); err != nil {
 			return err
 		}
 		t.HasArt = hasArt == 1
+		t.HasLyrics = hasLyrics == 1
 		l.byPath[t.Path] = t
 		l.byID[t.ID] = t
 	}
@@ -236,11 +241,14 @@ func (l *Library) upsertFile(path string) error {
 		// be a different song now, and the artwork the previous lookup settled
 		// on no longer describes it. Leaving it set meant the startup batch
 		// skipped the track for good and only a play could ever correct it
-		_, err := l.db.Exec(`UPDATE tracks SET size=?, mtime=?, title=?, artist=?, album=?, duration_ms=?, has_art=?, art_tried=0 WHERE id=?`,
+		_, err := l.db.Exec(`UPDATE tracks SET size=?, mtime=?, title=?, artist=?, album=?, duration_ms=?, has_art=?, art_tried=0, has_lyrics=0, lyrics_tried=0 WHERE id=?`,
 			size, mt, nullStr(title), nullStr(artist), nullStr(album), dur, boolInt(hasArt), existing.ID)
 		if err != nil {
 			return err
 		}
+		// Under the lock: readers of these fields include the HTTP handlers
+		// and FetchLyrics, which writes HasLyrics from its own goroutine
+		l.mu.Lock()
 		existing.Size = size
 		existing.MTime = mt
 		existing.Title = title
@@ -248,6 +256,11 @@ func (l *Library) upsertFile(path string) error {
 		existing.Album = album
 		existing.DurationMS = dur
 		existing.HasArt = hasArt
+		// The bytes changed, so anything cached about the old song no longer
+		// describes this one
+		existing.HasLyrics = false
+		l.mu.Unlock()
+		removeLyrics(l.cfg.DataDir, existing.ID)
 		if hasArt {
 			_ = saveArt(l.cfg.DataDir, existing.ID, path)
 		} else {
@@ -285,6 +298,7 @@ func (l *Library) removeTrack(t *Track) {
 	delete(l.byID, t.ID)
 	l.mu.Unlock()
 	_ = os.Remove(artPath(l.cfg.DataDir, t.ID))
+	removeLyrics(l.cfg.DataDir, t.ID)
 }
 
 // isWatchableDir reports whether a freshly created path is a real directory

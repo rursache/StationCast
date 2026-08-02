@@ -33,6 +33,7 @@ type Config struct {
 	LoudNorm         bool
 	ReplayGain       bool
 	ITunesArt        bool
+	Lyrics           bool
 	GainDB           int
 	MaxListeners     int
 	BurstSeconds     int
@@ -52,6 +53,7 @@ func Load() (*Config, error) {
 		LoudNorm:         envBool("STATIONCAST_LOUDNORM", false),
 		ReplayGain:       envBool("STATIONCAST_REPLAYGAIN", false),
 		ITunesArt:        envBool("STATIONCAST_ITUNES_ART", true),
+		Lyrics:           envBool("STATIONCAST_LYRICS", true),
 		RecaptchaSiteKey: os.Getenv("STATIONCAST_RECAPTCHA_SITE_KEY"),
 		RecaptchaSecret:  os.Getenv("STATIONCAST_RECAPTCHA_SECRET_KEY"),
 	}
@@ -116,6 +118,9 @@ func Load() (*Config, error) {
 		return nil, err
 	}
 	if err := os.MkdirAll(filepath.Join(cfg.DataDir, "hls"), 0o755); err != nil {
+		return nil, err
+	}
+	if err := os.MkdirAll(filepath.Join(cfg.DataDir, "lyrics"), 0o755); err != nil {
 		return nil, err
 	}
 

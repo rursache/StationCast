@@ -77,7 +77,9 @@
   });
 
   let lastArtURL = '';
+  let lastNP = null;
   function applyNowPlaying(np) {
+    lastNP = np;
     titleEl.textContent = np.title || 'Off air';
     artistEl.textContent = np.artist || '';
     if (np.next_title) {
@@ -134,11 +136,25 @@
     }
   }
 
-  fetch('/now-playing').then(r => r.json()).then(applyNowPlaying).catch(() => {});
-  connectSSE('/now-playing/sse', applyNowPlaying);
+  const onNowPlaying = np => { applyNowPlaying(np); lyrics?.sync(np); };
+  fetch('/now-playing').then(r => r.json()).then(onNowPlaying).catch(() => {});
+  connectSSE('/now-playing/sse', onNowPlaying);
 
   bindCopyButtons();
   bindModalDismiss();
+
+  // Lyrics. The button only appears when the server has a match, and the
+  // sync control lets a listener correct for how far behind live they are
+  const lyrics = initLyrics({
+    button: document.getElementById('open-lyrics'),
+    modal: document.getElementById('modal-lyrics'),
+    body: document.getElementById('lyrics-body'),
+    syncControls: document.getElementById('lyrics-sync'),
+    offsetLabel: document.getElementById('lyrics-offset'),
+    minus: document.getElementById('lyrics-minus'),
+    plus: document.getElementById('lyrics-plus'),
+  }, () => lastNP);
+
 
   document.getElementById('open-streams')?.addEventListener('click', () => {
     openModal(document.getElementById('modal-streams'));

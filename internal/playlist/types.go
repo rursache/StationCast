@@ -9,6 +9,7 @@ type Track struct {
 	Artist     string
 	Album      string
 	DurationMS int64
+	HasLyrics  bool
 	HasArt     bool
 	AddedAt    int64
 }
