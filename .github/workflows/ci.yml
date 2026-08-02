@@ -47,7 +47,10 @@ jobs:
           # fails the step
           curl -fsS -m 4 http://127.0.0.1:18000/stream -o /tmp/stream.mp3 || test $? -eq 28
           test $(wc -c < /tmp/stream.mp3) -gt 50000 || (echo "stream too small"; exit 1)
-          ffprobe -hide_banner -loglevel error -i /tmp/stream.mp3 -f null - 2>&1 | tee /tmp/probe.log
+          # ffmpeg, not ffprobe: -f null decodes every frame and reports what
+          # broke, where ffprobe only reads the header and stays quiet on a
+          # body full of corrupt frames
+          ffmpeg -hide_banner -loglevel error -i /tmp/stream.mp3 -f null - 2>&1 | tee /tmp/probe.log
           test ! -s /tmp/probe.log || (echo "decode errors"; exit 1)
           kill $SC || true
           wait $SC 2>/dev/null || true
