@@ -268,3 +268,104 @@ func TestFetchLyricsSkipsWhenAlreadyInFlight(t *testing.T) {
 		t.Error("the in-flight marker was cleared by a call that should have been skipped")
 	}
 }
+
+// Tags ripped from YouTube carry the artist and the release decoration inside
+// the title, which no lyrics database indexes that way
+func TestCleanTitle(t *testing.T) {
+	cases := []struct{ title, artist, want string }{
+		{"Mama", "Jador", "Mama"},
+		{"Jador - Mama", "Jador", "Mama"},
+		{"Jador - Mama | Official Video", "Jador", "Mama"},
+		{"Mama (Official Video)", "Jador", "Mama"},
+		{"Mama [Official Audio]", "Jador", "Mama"},
+		{"Mama (Official Lyric Video)", "Jador", "Mama"},
+		{"Mama - Jador", "Jador", "Mama"},
+		{"JADOR - Mama", "Jador", "Mama"}, // case insensitive prefix
+		// the individual artist of a collaboration also counts as a prefix
+		{"Kalif - Fata Care M-a Dat Gata", "Kalif x Luis Gabriel", "Fata Care M-a Dat Gata"},
+		// a title that is only decoration must not be reduced to nothing
+		{"Yellow", "Coldplay", "Yellow"},
+		// parentheses that are part of the song stay
+		{"Everything (I Do)", "Bryan Adams", "Everything (I Do)"},
+	}
+	for _, c := range cases {
+		if got := cleanTitle(c.title, c.artist); got != c.want {
+			t.Errorf("cleanTitle(%q, %q) = %q, want %q", c.title, c.artist, got, c.want)
+		}
+	}
+}
+
+// LRCLIB files a collaboration under one artist, so every credited form has
+// to be tried. This is what made "Kalif x Luis Gabriel" resolvable
+func TestArtistCandidates(t *testing.T) {
+	cases := []struct {
+		artist string
+		want   []string
+	}{
+		{"Kalif x Luis Gabriel", []string{"Kalif x Luis Gabriel", "Kalif", "Luis Gabriel"}},
+		{"Nicolae Guta si Modjo", []string{"Nicolae Guta si Modjo", "Nicolae Guta", "Modjo"}},
+		{"A feat. B", []string{"A feat. B", "A", "B"}},
+		{"A ft. B", []string{"A ft. B", "A", "B"}},
+		{"A & B", []string{"A & B", "A", "B"}},
+		{"A, B", []string{"A, B", "A", "B"}},
+		{"Coldplay", []string{"Coldplay"}},
+		{"", nil},
+	}
+	for _, c := range cases {
+		got := artistCandidates(c.artist)
+		if len(got) != len(c.want) {
+			t.Errorf("artistCandidates(%q) = %v, want %v", c.artist, got, c.want)
+			continue
+		}
+		for i := range got {
+			if got[i] != c.want[i] {
+				t.Errorf("artistCandidates(%q)[%d] = %q, want %q", c.artist, i, got[i], c.want[i])
+			}
+		}
+	}
+	// the full credit must always be tried first, since it is the most precise
+	if got := artistCandidates("A x B"); got[0] != "A x B" {
+		t.Errorf("full credit is not tried first: %v", got)
+	}
+}
+
+// Search results carry no duration filter server-side, so a wrong-length
+// result must be rejected rather than shown. Wrong lyrics are worse than none
+func TestPickLyricsCandidate(t *testing.T) {
+	synced := lrclibResponse{TrackName: "right", Duration: 200, SyncedLyrics: "[00:01.00]a"}
+	plain := lrclibResponse{TrackName: "plain", Duration: 200, PlainLyrics: "words"}
+	farOff := lrclibResponse{TrackName: "wrong length", Duration: 900, SyncedLyrics: "[00:01.00]a"}
+	instrumental := lrclibResponse{TrackName: "instrumental", Duration: 200, Instrumental: true}
+	empty := lrclibResponse{TrackName: "empty", Duration: 200}
+
+	want := int64(200_000)
+	if got := pickLyricsCandidate([]lrclibResponse{plain, synced}, want); got == nil || got.TrackName != "right" {
+		t.Errorf("a synced result should win over a plain one, got %v", got)
+	}
+	if got := pickLyricsCandidate([]lrclibResponse{plain}, want); got == nil || got.TrackName != "plain" {
+		t.Errorf("a plain result should be used when nothing is synced, got %v", got)
+	}
+	if got := pickLyricsCandidate([]lrclibResponse{farOff}, want); got != nil {
+		t.Errorf("a result %v seconds out was accepted", farOff.Duration)
+	}
+	if got := pickLyricsCandidate([]lrclibResponse{instrumental, empty}, want); got != nil {
+		t.Errorf("an instrumental or empty result was accepted: %v", got)
+	}
+	if got := pickLyricsCandidate(nil, want); got != nil {
+		t.Error("an empty result set produced a candidate")
+	}
+	// with no known duration the window cannot be applied, so length is not
+	// a reason to reject
+	if got := pickLyricsCandidate([]lrclibResponse{farOff}, 0); got == nil {
+		t.Error("a result was rejected on length despite the duration being unknown")
+	}
+	// just inside and just outside the window
+	edgeIn := lrclibResponse{Duration: float64(200 + lyricsDurationTolerance), SyncedLyrics: "[00:01.00]a"}
+	edgeOut := lrclibResponse{Duration: float64(200 + lyricsDurationTolerance + 1), SyncedLyrics: "[00:01.00]a"}
+	if pickLyricsCandidate([]lrclibResponse{edgeIn}, want) == nil {
+		t.Error("a result exactly on the tolerance boundary was rejected")
+	}
+	if pickLyricsCandidate([]lrclibResponse{edgeOut}, want) != nil {
+		t.Error("a result past the tolerance boundary was accepted")
+	}
+}

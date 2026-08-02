@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -20,7 +21,8 @@ const (
 	// LRCLIB is the only free lyrics source that returns time-synced lyrics
 	// without an API key, so every operator does not need their own account.
 	// It matches on artist, title, album and duration
-	lrclibGetURL = "https://lrclib.net/api/get"
+	lrclibGetURL    = "https://lrclib.net/api/get"
+	lrclibSearchURL = "https://lrclib.net/api/search"
 
 	// Identifies us to LRCLIB, which asks consumers to say who they are.
 	// It must not contain "Jellyfin-Server", a string their edge silently
@@ -35,6 +37,12 @@ const (
 	maxLyricsBytes = 256 << 10
 
 	lyricsTimeout = 10 * time.Second
+
+	// /api/search takes no duration parameter, so candidates are filtered
+	// here. Generous because encoder padding, fade-outs and remasters all
+	// shift the length a little, and the alternative to a near miss is
+	// showing nothing at all
+	lyricsDurationTolerance = 15
 )
 
 // errNoLyricsMatch is a definitive answer: LRCLIB has nothing for this track.
@@ -47,6 +55,55 @@ var errNoLyricsMatch = errors.New("no lyrics match")
 // which the frontend tells apart by looking for timestamps
 func lyricsPath(dataDir string, id int64) string {
 	return filepath.Join(dataDir, "lyrics", fmt.Sprintf("%d.lrc", id))
+}
+
+// artistSep matches the ways a collaboration gets credited. Tags in the wild
+// use all of them, while LRCLIB usually files the track under the first
+// artist alone
+var artistSep = regexp.MustCompile(`(?i)\s+(?:x|si|s\x{0219}i|s\x{015F}i|\x{0219}i|\x{015F}i|feat\.?|ft\.?|featuring|&|vs\.?|with)\s+|\s*[/;,]\s*`)
+
+// titleNoise is the decoration a YouTube rip carries into its tags
+var titleNoise = regexp.MustCompile(`(?i)\s*[\(\[](?:[^)\]]*\b(?:official|oficial|video|videoclip|audio|lyrics?|versuri|visualizer|hd|hq|4k|mv|remaster(?:ed)?|explicit)\b[^)\]]*)[\)\]]`)
+
+// cleanTitle removes the artist prefix and the release decoration that ripped
+// tags carry, so "Jador - Mama | Official Video" becomes "Mama". LRCLIB folds
+// case, punctuation and diacritics itself, so none of that is done here
+func cleanTitle(title, artist string) string {
+	t := strings.TrimSpace(title)
+	// "Artist - Title" and "Title - Artist", the two shapes a rip produces
+	for _, a := range artistCandidates(artist) {
+		if a == "" {
+			continue
+		}
+		if lower := strings.ToLower(t); strings.HasPrefix(lower, strings.ToLower(a)+" - ") {
+			t = strings.TrimSpace(t[len(a)+3:])
+		}
+		if lower := strings.ToLower(t); strings.HasSuffix(lower, " - "+strings.ToLower(a)) {
+			t = strings.TrimSpace(t[:len(t)-len(a)-3])
+		}
+	}
+	t = titleNoise.ReplaceAllString(t, "")
+	// a trailing "| anything" is nearly always channel decoration
+	if i := strings.LastIndex(t, "|"); i > 0 {
+		t = strings.TrimSpace(t[:i])
+	}
+	return strings.TrimSpace(t)
+}
+
+// artistCandidates returns the whole credit first, then each individual
+// artist. A track credited "Kalif x Luis Gabriel" is filed under "Kalif"
+func artistCandidates(artist string) []string {
+	full := strings.TrimSpace(artist)
+	out := []string{}
+	if full != "" {
+		out = append(out, full)
+	}
+	for _, part := range artistSep.Split(full, -1) {
+		if p := strings.TrimSpace(part); p != "" && !strings.EqualFold(p, full) {
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 type lrclibResponse struct {
@@ -80,7 +137,7 @@ func (l *Library) FetchLyrics(ctx context.Context, t *Track) {
 	}
 	defer l.lyricsInflight.Delete(t.ID)
 
-	res, err := l.queryLRCLIB(ctx, t)
+	res, err := l.lookupLyrics(ctx, t)
 	if err != nil {
 		// Only a definitive miss is recorded. A timeout, a DNS failure or a
 		// 5xx leaves the track open so the next play tries again
@@ -120,17 +177,54 @@ func (l *Library) FetchLyrics(ctx context.Context, t *Track) {
 		"synced", strings.TrimSpace(res.SyncedLyrics) != "")
 }
 
-func (l *Library) queryLRCLIB(ctx context.Context, t *Track) (*lrclibResponse, error) {
+// lookupLyrics tries the exact endpoint for each way the artist might be
+// credited, then falls back to the search endpoint. /api/get matches the
+// duration within two seconds server-side and the whole title exactly, so a
+// collaboration credit or a ripped title misses it even when the track is
+// there. The fallback is what finds those
+func (l *Library) lookupLyrics(ctx context.Context, t *Track) (*lrclibResponse, error) {
+	title := cleanTitle(t.Title, t.Artist)
+	if title == "" {
+		title = t.Title
+	}
+
+	var lastErr error = errNoLyricsMatch
+	for _, artist := range artistCandidates(t.Artist) {
+		res, err := l.queryLRCLIB(ctx, artist, title, t.Album, t.DurationMS)
+		if err == nil {
+			return res, nil
+		}
+		if !errors.Is(err, errNoLyricsMatch) {
+			// A transient failure must not be mistaken for a definitive miss
+			return nil, err
+		}
+		lastErr = err
+	}
+
+	// The exact endpoint found nothing under any credit, so try search, which
+	// ranks on full text and so matches entries filed under a whole
+	// "ARTIST - Title" string
+	res, err := l.searchLRCLIB(ctx, t, title)
+	if err == nil && res != nil {
+		return res, nil
+	}
+	if !errors.Is(err, errNoLyricsMatch) {
+		return nil, err
+	}
+	return nil, lastErr
+}
+
+func (l *Library) queryLRCLIB(ctx context.Context, artist, title, album string, durationMS int64) (*lrclibResponse, error) {
 	q := url.Values{}
-	q.Set("artist_name", t.Artist)
-	q.Set("track_name", t.Title)
-	if t.Album != "" {
-		q.Set("album_name", t.Album)
+	q.Set("artist_name", artist)
+	q.Set("track_name", title)
+	if album != "" {
+		q.Set("album_name", album)
 	}
 	// LRCLIB matches duration within a couple of seconds, which is what stops
 	// a cover or a remaster being served for the wrong recording. It rejects
 	// anything outside 1-3600, so only send a plausible value
-	if secs := t.DurationMS / 1000; secs >= 1 && secs <= 3600 {
+	if secs := durationMS / 1000; secs >= 1 && secs <= 3600 {
 		q.Set("duration", strconv.FormatInt(secs, 10))
 	}
 
@@ -211,4 +305,72 @@ func (l *Library) markLyricsTried(id int64) {
 // bound as a library churns
 func removeLyrics(dataDir string, id int64) {
 	_ = os.Remove(lyricsPath(dataDir, id))
+}
+
+// searchLRCLIB is the fallback when no exact match exists. It sends one
+// combined query string rather than separate fields, which is what engages
+// LRCLIB's full text ranking and so matches records whose title field holds a
+// whole "ARTIST - Title" string. Search takes no duration parameter, so
+// candidates are filtered here, and a candidate outside tolerance is dropped
+// rather than accepted as a near miss: the wrong lyrics are worse than none
+func (l *Library) searchLRCLIB(ctx context.Context, t *Track, title string) (*lrclibResponse, error) {
+	q := url.Values{}
+	q.Set("q", strings.TrimSpace(t.Artist+" "+title))
+
+	reqCtx, cancel := context.WithTimeout(ctx, lyricsTimeout)
+	defer cancel()
+	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, lrclibSearchURL+"?"+q.Encode(), nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", lrclibUserAgent)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("lrclib search status %d", resp.StatusCode)
+	}
+
+	var results []lrclibResponse
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 4*maxLyricsBytes)).Decode(&results); err != nil {
+		return nil, err
+	}
+	return pickLyricsCandidate(results, t.DurationMS), nil
+}
+
+// pickLyricsCandidate takes the best usable result, preferring a synced
+// version. Results arrive already ranked by relevance, so the first one
+// within tolerance wins and only a synced match displaces an earlier plain
+// one. Returns nil when nothing qualifies
+func pickLyricsCandidate(results []lrclibResponse, durationMS int64) *lrclibResponse {
+	want := durationMS / 1000
+	var plain *lrclibResponse
+	for i := range results {
+		r := &results[i]
+		if r.Instrumental {
+			continue
+		}
+		hasSynced := strings.TrimSpace(r.SyncedLyrics) != ""
+		if !hasSynced && strings.TrimSpace(r.PlainLyrics) == "" {
+			continue
+		}
+		// Only enforce the window when the track duration is known
+		if want > 0 {
+			if d := int64(r.Duration); d > 0 {
+				if diff := d - want; diff > lyricsDurationTolerance || diff < -lyricsDurationTolerance {
+					continue
+				}
+			}
+		}
+		if hasSynced {
+			return r
+		}
+		if plain == nil {
+			plain = r
+		}
+	}
+	return plain
 }
