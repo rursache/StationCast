@@ -21,8 +21,6 @@ const (
 	// LRCLIB is the only free lyrics source that returns time-synced lyrics
 	// without an API key, so every operator does not need their own account.
 	// It matches on artist, title, album and duration
-	lrclibGetURL    = "https://lrclib.net/api/get"
-	lrclibSearchURL = "https://lrclib.net/api/search"
 
 	// Identifies us to LRCLIB, which asks consumers to say who they are.
 	// It must not contain "Jellyfin-Server", a string their edge silently
@@ -43,6 +41,19 @@ const (
 	// shift the length a little, and the alternative to a near miss is
 	// showing nothing at all
 	lyricsDurationTolerance = 15
+)
+
+// Provider endpoints. Variables rather than constants so tests can point the
+// chain at a local server instead of the real services
+var (
+	lrclibGetURL    = "https://lrclib.net/api/get"
+	lrclibSearchURL = "https://lrclib.net/api/search"
+
+	// lyrics.ovh is consulted only after LRCLIB has nothing. Plain text only,
+	// no timings, and no way to disambiguate by duration, so it can never
+	// displace a synced result. Its coverage differs enough to be worth the
+	// second call: it carries tracks LRCLIB does not
+	lyricsOvhURL = "https://api.lyrics.ovh/v1"
 )
 
 // errNoLyricsMatch is a definitive answer: LRCLIB has nothing for this track.
@@ -107,6 +118,8 @@ func artistCandidates(artist string) []string {
 }
 
 type lrclibResponse struct {
+	// source names the provider that answered, for logging only
+	source       string
 	ID           int64   `json:"id"`
 	TrackName    string  `json:"trackName"`
 	ArtistName   string  `json:"artistName"`
@@ -174,44 +187,112 @@ func (l *Library) FetchLyrics(ctx context.Context, t *Track) {
 	l.mu.Unlock()
 
 	slog.Info("lyrics: cached", "id", t.ID, "artist", t.Artist, "title", t.Title,
-		"synced", strings.TrimSpace(res.SyncedLyrics) != "")
+		"source", res.source, "synced", strings.TrimSpace(res.SyncedLyrics) != "")
 }
 
-// lookupLyrics tries the exact endpoint for each way the artist might be
-// credited, then falls back to the search endpoint. /api/get matches the
-// duration within two seconds server-side and the whole title exactly, so a
-// collaboration credit or a ripped title misses it even when the track is
-// there. The fallback is what finds those
+// lookupLyrics walks the providers in order of quality. LRCLIB first, since
+// it is the only one that returns timings: the exact endpoint for each way
+// the artist might be credited, then its search endpoint. /api/get matches
+// the duration within two seconds server-side and the whole title exactly, so
+// a collaboration credit or a ripped title misses it even when the track is
+// there. lyrics.ovh comes last and only ever supplies plain text
 func (l *Library) lookupLyrics(ctx context.Context, t *Track) (*lrclibResponse, error) {
 	title := cleanTitle(t.Title, t.Artist)
 	if title == "" {
 		title = t.Title
 	}
+	credits := artistCandidates(t.Artist)
 
-	var lastErr error = errNoLyricsMatch
-	for _, artist := range artistCandidates(t.Artist) {
+	// A provider being unreachable must not stop the others being asked, but
+	// it does mean the track cannot be written off. Remembered here so the
+	// final answer is retryable unless every provider definitively said no
+	var transient error
+	note := func(err error) {
+		if err != nil && !errors.Is(err, errNoLyricsMatch) {
+			transient = err
+		}
+	}
+
+	// LRCLIB exact, once per way the artist might be credited
+	for _, artist := range credits {
 		res, err := l.queryLRCLIB(ctx, artist, title, t.Album, t.DurationMS)
 		if err == nil {
 			return res, nil
 		}
-		if !errors.Is(err, errNoLyricsMatch) {
-			// A transient failure must not be mistaken for a definitive miss
-			return nil, err
-		}
-		lastErr = err
+		note(err)
 	}
 
-	// The exact endpoint found nothing under any credit, so try search, which
-	// ranks on full text and so matches entries filed under a whole
-	// "ARTIST - Title" string
+	// LRCLIB search, which ranks on full text and so matches records whose
+	// title field holds a whole "ARTIST - Title" string
 	res, err := l.searchLRCLIB(ctx, t, title)
 	if err == nil && res != nil {
 		return res, nil
 	}
-	if !errors.Is(err, errNoLyricsMatch) {
+	note(err)
+
+	// lyrics.ovh last, plain text only, but it indexes a different catalogue
+	for _, artist := range credits {
+		res, err := l.queryLyricsOvh(ctx, artist, title)
+		if err == nil {
+			return res, nil
+		}
+		note(err)
+	}
+
+	if transient != nil {
+		return nil, transient
+	}
+	return nil, errNoLyricsMatch
+}
+
+// queryLyricsOvh asks lyrics.ovh, which returns plain text with no timings.
+// Artist and title go in the path rather than the query string, so both are
+// escaped. A hobby service with no uptime guarantee, hence the fallback
+// position and the same transient-versus-definitive distinction as LRCLIB
+func (l *Library) queryLyricsOvh(ctx context.Context, artist, title string) (*lrclibResponse, error) {
+	if artist == "" || title == "" {
+		return nil, errNoLyricsMatch
+	}
+	u := lyricsOvhURL + "/" + url.PathEscape(artist) + "/" + url.PathEscape(title)
+
+	reqCtx, cancel := context.WithTimeout(ctx, lyricsTimeout)
+	defer cancel()
+	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, u, nil)
+	if err != nil {
 		return nil, err
 	}
-	return nil, lastErr
+	req.Header.Set("User-Agent", lrclibUserAgent)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, errNoLyricsMatch
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("lyrics.ovh status %d", resp.StatusCode)
+	}
+
+	var out struct {
+		Lyrics string `json:"lyrics"`
+		Error  string `json:"error"`
+	}
+	if err := json.NewDecoder(io.LimitReader(resp.Body, maxLyricsBytes)).Decode(&out); err != nil {
+		return nil, err
+	}
+	// It answers 200 with an error field in some cases rather than a 404
+	if out.Error != "" || strings.TrimSpace(out.Lyrics) == "" {
+		return nil, errNoLyricsMatch
+	}
+	return &lrclibResponse{
+		source:      "lyrics.ovh",
+		ArtistName:  artist,
+		TrackName:   title,
+		PlainLyrics: out.Lyrics,
+	}, nil
 }
 
 func (l *Library) queryLRCLIB(ctx context.Context, artist, title, album string, durationMS int64) (*lrclibResponse, error) {
@@ -253,6 +334,7 @@ func (l *Library) queryLRCLIB(ctx context.Context, artist, title, album string, 
 	if err := json.NewDecoder(io.LimitReader(resp.Body, maxLyricsBytes)).Decode(&out); err != nil {
 		return nil, err
 	}
+	out.source = "lrclib"
 	return &out, nil
 }
 
@@ -338,7 +420,11 @@ func (l *Library) searchLRCLIB(ctx context.Context, t *Track, title string) (*lr
 	if err := json.NewDecoder(io.LimitReader(resp.Body, 4*maxLyricsBytes)).Decode(&results); err != nil {
 		return nil, err
 	}
-	return pickLyricsCandidate(results, t.DurationMS), nil
+	if best := pickLyricsCandidate(results, t.DurationMS); best != nil {
+		best.source = "lrclib/search"
+		return best, nil
+	}
+	return nil, nil
 }
 
 // pickLyricsCandidate takes the best usable result, preferring a synced

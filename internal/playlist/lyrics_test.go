@@ -2,6 +2,10 @@ package playlist
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -367,5 +371,170 @@ func TestPickLyricsCandidate(t *testing.T) {
 	}
 	if pickLyricsCandidate([]lrclibResponse{edgeOut}, want) != nil {
 		t.Error("a result past the tolerance boundary was accepted")
+	}
+}
+
+// pointProviders redirects the provider chain at local servers for the
+// duration of a test
+func pointProviders(t *testing.T, get, search, ovh string) {
+	t.Helper()
+	og, os_, oo := lrclibGetURL, lrclibSearchURL, lyricsOvhURL
+	lrclibGetURL, lrclibSearchURL, lyricsOvhURL = get, search, ovh
+	t.Cleanup(func() { lrclibGetURL, lrclibSearchURL, lyricsOvhURL = og, os_, oo })
+}
+
+func lyricsTestServer(t *testing.T, h http.HandlerFunc) string {
+	t.Helper()
+	srv := httptest.NewServer(h)
+	t.Cleanup(srv.Close)
+	return srv.URL
+}
+
+// LRCLIB stays primary: when it answers, the fallback is never consulted
+func TestLRCLIBWinsOverFallback(t *testing.T) {
+	var ovhCalled bool
+	lrclib := lyricsTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"trackName": "Yellow", "artistName": "Coldplay",
+			"syncedLyrics": "[00:01.00]synced words", "plainLyrics": "plain words",
+		})
+	})
+	ovh := lyricsTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		ovhCalled = true
+		_ = json.NewEncoder(w).Encode(map[string]any{"lyrics": "fallback words"})
+	})
+	pointProviders(t, lrclib+"/get", lrclib+"/search", ovh)
+
+	lib := &Library{}
+	res, err := lib.lookupLyrics(context.Background(), &Track{Artist: "Coldplay", Title: "Yellow"})
+	if err != nil {
+		t.Fatalf("lookupLyrics: %v", err)
+	}
+	if res.source != "lrclib" {
+		t.Errorf("answered by %q, want the primary provider", res.source)
+	}
+	if res.SyncedLyrics == "" {
+		t.Error("the synced lyrics from the primary provider were dropped")
+	}
+	if ovhCalled {
+		t.Error("the fallback was called even though the primary answered")
+	}
+}
+
+// The fallback exists because its catalogue differs, so a miss on the
+// primary must reach it
+func TestFallbackUsedWhenPrimaryHasNothing(t *testing.T) {
+	lrclib := lyricsTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, "search") {
+			_, _ = w.Write([]byte("[]"))
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	})
+	ovh := lyricsTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"lyrics": "fallback words"})
+	})
+	pointProviders(t, lrclib+"/get", lrclib+"/search", ovh)
+
+	lib := &Library{}
+	res, err := lib.lookupLyrics(context.Background(), &Track{Artist: "Nicolae Guta", Title: "Abracadabra"})
+	if err != nil {
+		t.Fatalf("lookupLyrics: %v", err)
+	}
+	if res.source != "lyrics.ovh" {
+		t.Errorf("answered by %q, want the fallback", res.source)
+	}
+	if res.SyncedLyrics != "" {
+		t.Error("the fallback claimed synced lyrics, which it cannot provide")
+	}
+	if res.PlainLyrics != "fallback words" {
+		t.Errorf("PlainLyrics = %q", res.PlainLyrics)
+	}
+}
+
+// Both providers missing is a definitive answer, not an error to retry
+func TestBothProvidersMissing(t *testing.T) {
+	miss := lyricsTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, "search") {
+			_, _ = w.Write([]byte("[]"))
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	})
+	pointProviders(t, miss+"/get", miss+"/search", miss)
+
+	lib := &Library{}
+	_, err := lib.lookupLyrics(context.Background(), &Track{Artist: "Nobody", Title: "Nothing"})
+	if !errors.Is(err, errNoLyricsMatch) {
+		t.Errorf("error = %v, want errNoLyricsMatch so the track is not retried forever", err)
+	}
+}
+
+// lyrics.ovh answers 200 with an error field in some cases rather than 404
+func TestFallbackTreatsErrorBodyAsMiss(t *testing.T) {
+	miss := lyricsTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, "search") {
+			_, _ = w.Write([]byte("[]"))
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	})
+	ovh := lyricsTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"error": "No lyrics found"})
+	})
+	pointProviders(t, miss+"/get", miss+"/search", ovh)
+
+	lib := &Library{}
+	if _, err := lib.lookupLyrics(context.Background(), &Track{Artist: "A", Title: "B"}); !errors.Is(err, errNoLyricsMatch) {
+		t.Errorf("error = %v, want errNoLyricsMatch", err)
+	}
+}
+
+// A provider being down is transient, so the track must stay open for retry
+func TestProviderOutageIsTransient(t *testing.T) {
+	down := lyricsTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	})
+	pointProviders(t, down, down, down)
+
+	lib := &Library{}
+	_, err := lib.lookupLyrics(context.Background(), &Track{Artist: "A", Title: "B"})
+	if err == nil {
+		t.Fatal("an outage returned no error")
+	}
+	if errors.Is(err, errNoLyricsMatch) {
+		t.Error("an outage was recorded as a definitive miss, so the track would never be retried")
+	}
+}
+
+// Artist and title go in the URL path for lyrics.ovh, so anything with a
+// slash or a space has to survive escaping
+func TestFallbackEscapesPathSegments(t *testing.T) {
+	var gotPath string
+	ovh := lyricsTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.RequestURI
+		_ = json.NewEncoder(w).Encode(map[string]any{"lyrics": "words"})
+	})
+	pointProviders(t, "", "", ovh)
+
+	lib := &Library{}
+	res, err := lib.queryLyricsOvh(context.Background(), "AC/DC", "Highway to Hell")
+	if err != nil {
+		t.Fatalf("queryLyricsOvh: %v", err)
+	}
+	if res == nil || res.PlainLyrics == "" {
+		t.Fatal("no lyrics returned")
+	}
+	if !strings.Contains(gotPath, "AC%2FDC") {
+		t.Errorf("path %q did not escape the slash in the artist", gotPath)
+	}
+}
+
+func TestFallbackSkipsEmptyFields(t *testing.T) {
+	lib := &Library{}
+	for _, c := range []struct{ artist, title string }{{"", "x"}, {"x", ""}, {"", ""}} {
+		if _, err := lib.queryLyricsOvh(context.Background(), c.artist, c.title); !errors.Is(err, errNoLyricsMatch) {
+			t.Errorf("queryLyricsOvh(%q, %q) error = %v, want errNoLyricsMatch", c.artist, c.title, err)
+		}
 	}
 }
