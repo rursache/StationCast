@@ -386,11 +386,20 @@
   // Queue / History live re-render. On every now-playing change the manual
   // queue may have advanced (a queued track became current), and history
   // gained an entry. Pull fresh state and rebuild both panes
+  // Re-rendering costs DOM churn the renderer has to garbage collect, and
+  // this runs on every SSE tick while the queue and history change rarely.
+  // Comparing the raw payload first keeps the rebuild to the ticks that
+  // actually changed something
+  let lastStateSig = '';
+
   async function refreshAdminState() {
     try {
       const r = await fetch('/admin/state.json', { credentials: 'same-origin', cache: 'no-store' });
       if (!r.ok) return;
-      const d = await r.json();
+      const text = await r.text();
+      if (text === lastStateSig) return;
+      lastStateSig = text;
+      const d = JSON.parse(text);
       renderQueueList(d.queue || []);
       renderHistoryList(d.history || []);
       updateQueueHistoryCount();
@@ -447,11 +456,22 @@
     count.textContent = `${n} item${n === 1 ? '' : 's'}`;
   }
 
-  async function refreshLibrary() {
+  // The library list is the largest DOM on the page, one row and one artwork
+  // image per track. Rebuilding it unconditionally on a timer meant the
+  // renderer discarded and recreated every row and every decoded image every
+  // 15 seconds for as long as the tab stayed open, which is what drove the
+  // admin tab into the hundreds of megabytes. The list only changes when the
+  // library does, so the payload is compared before touching the DOM
+  let lastLibSig = '';
+
+  async function refreshLibrary(force) {
     try {
       const r = await fetch('/admin/library.json', { credentials: 'same-origin' });
       if (!r.ok) return;
-      const tracks = await r.json();
+      const text = await r.text();
+      if (!force && text === lastLibSig) return;
+      lastLibSig = text;
+      const tracks = JSON.parse(text);
       const list = document.getElementById('lib-list');
       const count = document.getElementById('lib-count');
       if (count) count.textContent = tracks.length;
@@ -464,7 +484,7 @@
       list.innerHTML = tracks.map(t => `
         <li class="lib-row group flex items-center gap-3 bg-neutral-950/40 hover:bg-neutral-800/30 rounded-lg px-3 py-2 transition">
           <div class="w-9 h-9 rounded-lg bg-neutral-800 flex-shrink-0 flex items-center justify-center overflow-hidden">
-            ${t.has_art ? `<img src="/art/${t.id}" class="w-full h-full object-cover">` : `<span class="text-neutral-600">♪</span>`}
+            ${t.has_art ? `<img src="/art/${t.id}" loading="lazy" decoding="async" class="w-full h-full object-cover">` : `<span class="text-neutral-600">♪</span>`}
           </div>
           <div class="lib-meta${showFilenames ? ' hidden' : ''} min-w-0 flex-1">
             <div class="overflow-x-auto whitespace-nowrap no-scrollbar text-sm">${escapeHTML(t.title) || '<span class="text-neutral-500">untitled</span>'}</div>
@@ -498,7 +518,7 @@
     } catch {}
   }
 
-  document.getElementById('lib-refresh')?.addEventListener('click', refreshLibrary);
+  document.getElementById('lib-refresh')?.addEventListener('click', () => refreshLibrary(true));
 
   // Mode dropdown: confirm on change, revert on cancel, otherwise submit
   // via fetch so the page doesn't reload and break the audio monitor
@@ -602,6 +622,9 @@
   document.addEventListener('visibilitychange', () => { if (!document.hidden) { refreshLibrary(); refreshAdminState(); } });
 
   setInterval(updateProgress, 1000);
+  // Still polled, but the signature check above means a rebuild only happens
+  // when the library actually changed. Files are added and removed rarely, so
+  // in practice this is a small fetch and no DOM work at all
   setInterval(refreshLibrary, 15000);
 </script>
 </body>
