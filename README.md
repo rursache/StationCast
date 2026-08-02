@@ -16,7 +16,7 @@ A small, self-contained internet radio server in Go. Drop audio files into a dir
 - **Audio chain controls** for consistent perceived volume: ReplayGain, EBU R128 loudness normalization, and a final dB boost - see [Environment variables](#environment-variables)
 - **Live metadata to every client**: ID3 title / artist / album propagated via ICY `StreamTitle`, `/now-playing` JSON, SSE, and `navigator.mediaSession`
 - **Album art with iTunes fallback**: iTunes Search API preferred per `(artist, album)`, embedded ID3 art as fallback, placeholder otherwise. Cached on disk
-- **Web admin**: shuffle / sequential / loop modes, manual queue, upload / rename / delete, live now-playing and listener count
+- **Web admin**: shuffle / sequential / loop modes, manual queue with drag-to-reorder, upload / rename / delete, live now-playing and listener count
 - **Public player**: live now-playing over SSE, one-click copy of every stream URL, auto-picks HLS on iOS Safari
 - **Security**: optional reCAPTCHA v3 on the login form, `STATIONCAST_MAX_LISTENERS` hard cap on `/stream` connections
 - **Container-ready**: multi-arch (amd64/arm64) image with `PUID`/`PGID`, only `ffmpeg` as a runtime dep
@@ -163,6 +163,7 @@ The public web UI at `/` auto-picks HLS on iOS Safari and the direct MP3 stream 
 | `POST` | `/admin/mode` | Set mode (`shuffle`, `sequential`, `loop`) |
 | `POST` | `/admin/queue` | Enqueue a track id |
 | `POST` | `/admin/queue/remove` | Remove queue entry by index |
+| `POST` | `/admin/queue/move` | Reorder a queue entry, `409` if the queue moved on |
 | `POST` | `/admin/files/upload` | Upload an audio file into the music directory |
 | `POST` | `/admin/files/rename` | Rename a file |
 | `POST` | `/admin/files/delete` | Delete a file |

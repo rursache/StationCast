@@ -102,12 +102,15 @@
       <div id="qh-pane-queue" class="flex-1 min-h-0 overflow-y-auto -mr-2 pr-2">
           <ol id="qh-queue-list" class="space-y-1.5">
             {{range $i, $t := .Queue}}
-            <li class="group flex items-center gap-2 text-sm bg-neutral-950/40 hover:bg-neutral-800/40 rounded-lg px-3 py-2" data-idx="{{$i}}">
-              <span class="text-neutral-600 text-xs w-5 text-right flex-shrink-0">{{add $i 1}}</span>
+            <li class="group flex items-center gap-2 text-sm bg-neutral-950/40 hover:bg-neutral-800/40 rounded-lg pl-2 pr-3 py-2" data-sortable-item data-idx="{{$i}}" data-track-id="{{$t.ID}}">
+              <span class="text-neutral-600 text-xs w-4 text-right flex-shrink-0 tabular-nums">{{add $i 1}}</span>
               <div class="flex-1 min-w-0 overflow-x-auto whitespace-nowrap no-scrollbar">{{displayTitle $t.Title $t.Artist}}</div>
-              <form method="post" action="/admin/queue/remove" class="flex-shrink-0">
+              <button type="button" data-sort-handle aria-label="Reorder, use arrow keys" title="Drag to reorder" class="flex-shrink-0 cursor-grab active:cursor-grabbing touch-none text-neutral-600 hover:text-neutral-300 focus:text-neutral-300 focus:outline-none p-1 -m-1">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-4 h-4"><path stroke-linecap="round" d="M4 9h16M4 15h16"/></svg>
+          </button>
+              <form method="post" action="/admin/queue/remove" class="flex-shrink-0 flex items-center">
                 <input type="hidden" name="idx" value="{{$i}}">
-                <button class="opacity-0 group-hover:opacity-100 text-neutral-500 hover:text-rose-400 text-xs transition" title="Remove">
+                <button class="flex-shrink-0 text-neutral-600 hover:text-rose-400 transition p-1 -m-1" title="Remove" aria-label="Remove from queue">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-4 h-4"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
                 </button>
               </form>
@@ -121,7 +124,7 @@
         <ol id="qh-history-list" class="space-y-1.5">
           {{range $i, $t := .History}}
           <li class="flex items-center gap-2 text-sm bg-neutral-950/40 rounded-lg px-3 py-2">
-            <span class="text-neutral-600 text-xs w-5 text-right flex-shrink-0">{{add $i 1}}</span>
+            <span class="text-neutral-600 text-xs w-4 text-right flex-shrink-0 tabular-nums">{{add $i 1}}</span>
             <div class="flex-1 min-w-0 overflow-x-auto whitespace-nowrap no-scrollbar">{{displayTitle $t.Title $t.Artist}}</div>
           </li>
           {{end}}
@@ -418,7 +421,58 @@
   // actually changed something
   let lastStateSig = '';
 
+  // Reordering the queue by dragging. The list is rebuilt from the server on
+  // every change, so a rebuild during a drag would pull the element out from
+  // under the pointer
+  const queueSortable = makeSortable(document.getElementById('qh-queue-list'), moveQueueItem);
+
+  // dragging() goes false the moment the finger lifts, but the move is not
+  // settled until the server answers. A refresh landing in between rebuilds
+  // the list and detaches the row this call is holding
+  let queueMovesInFlight = 0;
+
+  async function moveQueueItem(from, to, el) {
+    const id = el.dataset.trackId;
+    let ok = false;
+    queueMovesInFlight++;
+    try {
+      const r = await fetch('/admin/queue/move', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Accept': 'application/json' },
+        body: new URLSearchParams({ from, to, id }),
+      });
+      ok = r.ok;
+    } catch {
+      ok = false;
+    } finally {
+      queueMovesInFlight--;
+    }
+
+    lastStateSig = '';
+    // 409 means a track started playing mid-drag and the positions the drag
+    // was based on no longer describe the queue. The server refused it, so
+    // pull the real order back. The counter is already released here, or the
+    // refresh would refuse to run
+    if (!ok) {
+      await refreshAdminState();
+      return;
+    }
+    // A refresh can still have rebuilt the list underneath us, in which case
+    // it already carries the server's order and there is nothing to renumber
+    if (!el.isConnected || !el.parentElement) return;
+    // Renumber in place so the labels match without waiting for the next tick
+    [...el.parentElement.children].forEach((li, i) => {
+      li.dataset.idx = i;
+      const n = li.querySelector('span');
+      if (n) n.textContent = i + 1;
+      const idx = li.querySelector('input[name="idx"]');
+      if (idx) idx.value = i;
+    });
+  }
+
   async function refreshAdminState() {
+    if (queueSortable.dragging() || queueMovesInFlight > 0) return;
     try {
       const r = await fetch('/admin/state.json', { credentials: 'same-origin', cache: 'no-store' });
       if (!r.ok) return;
@@ -443,12 +497,15 @@
     }
     empty.classList.add('hidden');
     list.innerHTML = items.map((t, i) => `
-      <li class="group flex items-center gap-2 text-sm bg-neutral-950/40 hover:bg-neutral-800/40 rounded-lg px-3 py-2" data-idx="${i}">
-        <span class="text-neutral-600 text-xs w-5 text-right flex-shrink-0">${i + 1}</span>
+      <li class="group flex items-center gap-2 text-sm bg-neutral-950/40 hover:bg-neutral-800/40 rounded-lg pl-2 pr-3 py-2" data-sortable-item data-idx="${i}" data-track-id="${t.id}">
+        <span class="text-neutral-600 text-xs w-4 text-right flex-shrink-0 tabular-nums">${i + 1}</span>
         <div class="flex-1 min-w-0 overflow-x-auto whitespace-nowrap no-scrollbar">${escapeHTML(t.display || t.title || '')}</div>
-        <form method="post" action="/admin/queue/remove" class="flex-shrink-0">
+        <button type="button" data-sort-handle aria-label="Reorder, use arrow keys" title="Drag to reorder" class="flex-shrink-0 cursor-grab active:cursor-grabbing touch-none text-neutral-600 hover:text-neutral-300 focus:text-neutral-300 focus:outline-none p-1 -m-1">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-4 h-4"><path stroke-linecap="round" d="M4 9h16M4 15h16"/></svg>
+          </button>
+        <form method="post" action="/admin/queue/remove" class="flex-shrink-0 flex items-center">
           <input type="hidden" name="idx" value="${i}">
-          <button class="opacity-0 group-hover:opacity-100 text-neutral-500 hover:text-rose-400 text-xs transition" title="Remove">
+          <button class="flex-shrink-0 text-neutral-600 hover:text-rose-400 transition p-1 -m-1" title="Remove" aria-label="Remove from queue">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-4 h-4"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
           </button>
         </form>
@@ -467,7 +524,7 @@
     empty.classList.add('hidden');
     list.innerHTML = items.map((t, i) => `
       <li class="flex items-center gap-2 text-sm bg-neutral-950/40 rounded-lg px-3 py-2">
-        <span class="text-neutral-600 text-xs w-5 text-right flex-shrink-0">${i + 1}</span>
+        <span class="text-neutral-600 text-xs w-4 text-right flex-shrink-0 tabular-nums">${i + 1}</span>
         <div class="flex-1 min-w-0 overflow-x-auto whitespace-nowrap no-scrollbar">${escapeHTML(t.display || t.title || '')}</div>
       </li>`).join('');
   }

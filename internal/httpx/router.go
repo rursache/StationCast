@@ -85,6 +85,7 @@ func NewRouter(cfg *config.Config, db *storage.DB, lib *playlist.Library, sched 
 			r.With(readTimeout(15*time.Second)).Post("/mode", s.handleSetMode)
 			r.With(readTimeout(15*time.Second)).Post("/queue", s.handleEnqueue)
 			r.With(readTimeout(15*time.Second)).Post("/queue/remove", s.handleDequeue)
+			r.With(readTimeout(15*time.Second)).Post("/queue/move", s.handleQueueMove)
 			r.With(readTimeout(15*time.Second)).Post("/files/rename", s.handleRename)
 			r.With(readTimeout(15*time.Second)).Post("/files/delete", s.handleDelete)
 			r.With(readTimeout(10*time.Minute)).Post("/files/upload", s.handleUpload)

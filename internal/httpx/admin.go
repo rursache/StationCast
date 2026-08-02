@@ -2,6 +2,7 @@ package httpx
 
 import (
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"path/filepath"
@@ -207,6 +208,49 @@ func (s *Server) handleDequeue(w http.ResponseWriter, r *http.Request) {
 	if err := s.sched.Dequeue(idx); err != nil {
 		slog.Warn("dequeue", "idx", idx, "err", err)
 		http.Error(w, "dequeue failed", http.StatusBadRequest)
+		return
+	}
+	respondAdminPostOK(w, r)
+}
+
+// handleQueueMove reorders the manual queue. The request carries the track
+// the client believes is at `from`, because the queue advances on its own as
+// tracks play: a drag that started before the head was consumed would
+// otherwise move the wrong entry. A stale request is refused rather than
+// applied, and the client refreshes
+func (s *Server) handleQueueMove(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad form", http.StatusBadRequest)
+		return
+	}
+	from, err := strconv.Atoi(r.FormValue("from"))
+	if err != nil {
+		http.Error(w, "bad from", http.StatusBadRequest)
+		return
+	}
+	to, err := strconv.Atoi(r.FormValue("to"))
+	if err != nil {
+		http.Error(w, "bad to", http.StatusBadRequest)
+		return
+	}
+	id, err := strconv.ParseInt(r.FormValue("id"), 10, 64)
+	if err != nil {
+		http.Error(w, "bad id", http.StatusBadRequest)
+		return
+	}
+
+	switch err := s.sched.MoveQueueItem(from, to, id); {
+	case err == nil:
+	case errors.Is(err, playlist.ErrQueueChanged):
+		// Not the client's fault, the queue moved on. 409 tells it to refresh
+		http.Error(w, "queue changed", http.StatusConflict)
+		return
+	case errors.Is(err, playlist.ErrQueueIndexOutOfRange):
+		http.Error(w, "index out of range", http.StatusBadRequest)
+		return
+	default:
+		slog.Warn("queue move", "from", from, "to", to, "err", err)
+		http.Error(w, "move failed", http.StatusInternalServerError)
 		return
 	}
 	respondAdminPostOK(w, r)

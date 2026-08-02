@@ -76,3 +76,32 @@ select option {
   color: #fafafa;
   font-weight: 600;
 }
+
+/* The row being dragged. Lifted off the list so it reads as picked up: it
+   follows the pointer directly, so it must not have a transform transition
+   or it would lag behind the finger */
+.sorting {
+  background: rgb(64 64 64 / 0.95);
+  box-shadow: 0 12px 28px rgb(0 0 0 / 0.55);
+  outline: 1px solid rgb(244 63 94 / 0.35);
+  border-radius: 0.5rem;
+  position: relative;
+  z-index: 20;
+  cursor: grabbing;
+  transition: background 120ms ease, box-shadow 120ms ease;
+}
+/* Rows the dragged one passes slide aside. The transition is on these, not
+   on the dragged row, so the gap opens smoothly while the row stays glued
+   to the pointer */
+.sort-shifting {
+  transition: transform 160ms cubic-bezier(0.2, 0, 0, 1);
+  will-change: transform;
+}
+/* Without this a finger drag on the handle scrolls the pane instead */
+[data-sort-handle] { touch-action: none; }
+/* No text selection while dragging a row around */
+.sorting, .sort-shifting { user-select: none; -webkit-user-select: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .sort-shifting { transition: none; }
+}

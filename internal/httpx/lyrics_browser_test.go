@@ -230,3 +230,266 @@ const ctl = initLyrics(els, () => ({ has_lyrics: true, lyrics_url: "/lyrics/B", 
 		t.Fatalf("unexpected harness output:\n%s", out)
 	}
 }
+
+// makeSortable is pointer driven so it works with a finger as well as a
+// mouse. The row follows the pointer and the DOM is reordered once on
+// release, so the arithmetic that decides the landing slot is worth pinning
+// down without a browser
+func TestSortableUnderNode(t *testing.T) {
+	node, err := exec.LookPath("node")
+	if err != nil {
+		t.Skipf("node unavailable: %v", err)
+	}
+	src, ok := staticFiles["utils.js"]
+	if !ok {
+		t.Fatal("utils.js missing from the embedded static set")
+	}
+	re := regexp.MustCompile(`(?s)function makeSortable\(.*?\n}`)
+	fn := re.Find(src)
+	if fn == nil {
+		t.Fatal("makeSortable not found in utils.js")
+	}
+
+	harness := string(fn) + `
+
+let fail = 0;
+const check = (name, cond, extra) => {
+  if (!cond) { fail++; console.log("FAIL  " + name + "  " + JSON.stringify(extra)); }
+};
+
+const PITCH = 20;
+
+// A list of rows PITCH tall, stacked from y=0
+function makeList(n) {
+  const children = [];
+  const list = {
+    children,
+    contains: () => true,
+    _h: {},
+    addEventListener(t, fn) { this._h[t] = fn; },
+    insertBefore(el, ref) {
+      const i = children.indexOf(el);
+      if (i >= 0) children.splice(i, 1);
+      const j = ref === null || ref === undefined ? children.length : children.indexOf(ref);
+      children.splice(j < 0 ? children.length : j, 0, el);
+    },
+    fire(t, e) { (this._h[t] || (() => {}))(e); },
+  };
+  for (let i = 0; i < n; i++) {
+    const el = {
+      id: String(i), _i: i, _cls: new Set(), style: {},
+      classList: { add: c => el._cls.add(c), remove: c => el._cls.delete(c), contains: c => el._cls.has(c) },
+      getBoundingClientRect() {
+        const top = children.indexOf(el) * PITCH;
+        return { top, height: PITCH, bottom: top + PITCH, left: 0 };
+      },
+      get nextSibling() { const j = children.indexOf(el); return j >= 0 && j + 1 < children.length ? children[j + 1] : null; },
+      closest: s => (s === '[data-sortable-item]' ? el : null),
+      setPointerCapture() {}, focus() {},
+    };
+    el.handle = { closest: s => (s === '[data-sortable-item]' ? el : el.handle), setPointerCapture() {}, focus() {} };
+    children.push(el);
+  }
+  return list;
+}
+
+// a real pointerdown always carries clientY, and the drag origin is read
+// from it, so the stub has to supply one
+const down = (list, el, y) => list.fire('pointerdown', {
+  pointerId: 1, clientY: y === undefined ? el.getBoundingClientRect().top + PITCH / 2 : y,
+  target: { closest: s => (s === '[data-sort-handle]' ? el.handle : null) }, preventDefault() {},
+});
+const moveTo = (list, y) => list.fire('pointermove', { pointerId: 1, clientY: y, preventDefault() {} });
+const up = (list, y) => list.fire('pointerup', { pointerId: 1, clientY: y, preventDefault() {} });
+
+// --- landing slot arithmetic ---
+let moved = null;
+let list = makeList(4);
+makeSortable(list, (from, to) => { moved = [from, to]; });
+let el0 = list.children[0];
+down(list, el0);
+moveTo(list, PITCH / 2 + 2 * PITCH);   // two rows down
+up(list, PITCH / 2 + 2 * PITCH);
+check("dragging down two rows lands two down", moved && moved[0] === 0 && moved[1] === 2, moved);
+check("dom reordered on release", list.children.map(c => c.id).join() === "1,2,0,3", list.children.map(c => c.id));
+
+// dragging up
+moved = null;
+list = makeList(4);
+makeSortable(list, (from, to) => { moved = [from, to]; });
+let el3 = list.children[3];
+down(list, el3);
+moveTo(list, 3 * PITCH + PITCH / 2 - 3 * PITCH);
+up(list, 3 * PITCH + PITCH / 2 - 3 * PITCH);
+check("dragging to the top lands first", moved && moved[0] === 3 && moved[1] === 0, moved);
+check("dom order after moving up", list.children.map(c => c.id).join() === "3,0,1,2", list.children.map(c => c.id));
+
+// --- the row follows the pointer, neighbours slide aside ---
+list = makeList(4);
+makeSortable(list, () => {});
+const drag0 = list.children[0];
+down(list, drag0);
+check("dragged row is marked", drag0._cls.has("sorting"), [...drag0._cls]);
+check("other rows are marked for transition", list.children.slice(1).every(r => r._cls.has("sort-shifting")), null);
+moveTo(list, PITCH / 2 + 30);
+check("dragged row tracks the pointer", drag0.style.transform === "translateY(30px)", drag0.style.transform);
+check("passed neighbour slides up one pitch", list.children[1].style.transform === "translateY(-" + PITCH + "px)", list.children[1].style.transform);
+check("row beyond the target is untouched", !list.children[3].style.transform, list.children[3].style.transform);
+check("dom order is stable during the drag", list.children.map(c => c.id).join() === "0,1,2,3", list.children.map(c => c.id));
+up(list, PITCH / 2 + 30);
+check("transform cleared on release", !drag0.style.transform, drag0.style.transform);
+check("classes cleared on release", !drag0._cls.has("sorting") && !list.children[0]._cls.has("sort-shifting"), null);
+
+// --- clamped to the ends ---
+moved = null;
+list = makeList(3);
+makeSortable(list, (from, to) => { moved = [from, to]; });
+down(list, list.children[0]);
+moveTo(list, 9999);      // far past the bottom
+up(list, 9999);
+check("dragging past the end clamps to the last slot", moved && moved[1] === 2, moved);
+
+moved = null;
+list = makeList(3);
+makeSortable(list, (from, to) => { moved = [from, to]; });
+down(list, list.children[2]);
+moveTo(list, -9999);     // far above the top
+up(list, -9999);
+check("dragging past the top clamps to the first slot", moved && moved[1] === 0, moved);
+
+// --- things that must not report a move ---
+moved = null;
+list = makeList(3);
+makeSortable(list, (from, to) => { moved = [from, to]; });
+down(list, list.children[0]);
+up(list, PITCH / 2);
+check("a press without dragging is not a move", moved === null, moved);
+
+moved = null;
+list = makeList(3);
+const s2 = makeSortable(list, (from, to) => { moved = [from, to]; });
+list.fire('pointerdown', { pointerId: 1, target: { closest: () => null }, preventDefault() {} });
+check("a press off the handle does not start a drag", s2.dragging() === false, null);
+moveTo(list, 50); up(list, 50);
+check("an off-handle drag reports nothing", moved === null, moved);
+
+// --- in-flight state, used to hold off a re-render ---
+list = makeList(3);
+const s3 = makeSortable(list, () => {});
+check("idle at rest", s3.dragging() === false, null);
+down(list, list.children[0]);
+check("dragging while the pointer is down", s3.dragging() === true, null);
+up(list, 0);
+check("idle after release", s3.dragging() === false, null);
+
+// a cancelled pointer must clean up and report nothing
+moved = null;
+list = makeList(3);
+const s4 = makeSortable(list, (from, to) => { moved = [from, to]; });
+const c0 = list.children[0];
+down(list, c0);
+moveTo(list, PITCH / 2 + 2 * PITCH);
+list.fire('pointercancel', { pointerId: 1, clientY: PITCH / 2 + 2 * PITCH, preventDefault() {} });
+check("a cancelled pointer ends the drag", s4.dragging() === false, null);
+check("a cancelled pointer clears the transform", !c0.style.transform, c0.style.transform);
+// the browser took the gesture away, the user did not drop it there
+check("a cancelled pointer reports no move", moved === null, moved);
+check("a cancelled pointer leaves the dom alone", list.children.map(c => c.id).join() === "0,1,2", list.children.map(c => c.id));
+
+// losing capture without a pointerup must not wedge the drag on forever,
+// since a stuck drag holds off every later refresh of the pane
+moved = null;
+list = makeList(3);
+const s7 = makeSortable(list, (from, to) => { moved = [from, to]; });
+const w0 = list.children[0];
+down(list, w0);
+moveTo(list, PITCH / 2 + 2 * PITCH);
+list.fire('lostpointercapture', { pointerId: 1, clientY: PITCH / 2 + 2 * PITCH, preventDefault() {} });
+check("losing capture ends the drag", s7.dragging() === false, null);
+check("losing capture clears the transform", !w0.style.transform, w0.style.transform);
+check("losing capture reports no move", moved === null, moved);
+// a new drag has to be possible afterwards
+down(list, list.children[0]);
+check("a drag can start again after capture was lost", s7.dragging() === true, null);
+up(list, PITCH / 2);
+
+// capture is released on every normal drop too, so the event fires after
+// pointerup and must not undo or double-apply the move it just made
+moved = null;
+list = makeList(3);
+makeSortable(list, (from, to) => { moved = [from, to]; });
+down(list, list.children[0]);
+moveTo(list, PITCH / 2 + PITCH);
+up(list, PITCH / 2 + PITCH);
+const afterUp = list.children.map(c => c.id).join();
+list.fire('lostpointercapture', { pointerId: 1, clientY: PITCH / 2 + PITCH, preventDefault() {} });
+check("capture loss after a drop reports only one move", moved && moved[0] === 0 && moved[1] === 1, moved);
+check("capture loss after a drop leaves the order alone", list.children.map(c => c.id).join() === afterUp, afterUp);
+
+// a second pointer must not hijack a drag in progress
+list = makeList(3);
+const s5 = makeSortable(list, () => {});
+down(list, list.children[0]);
+list.fire('pointermove', { pointerId: 99, clientY: 500, preventDefault() {} });
+check("a different pointer is ignored", !list.children[0].style.transform || list.children[0].style.transform === "", list.children[0].style.transform);
+up(list, 0);
+
+// --- keyboard reordering, the pointer-free path ---
+const key = (list, el, k) => list.fire('keydown', {
+  key: k, target: { closest: s => (s === '[data-sort-handle]' ? el.handle : null) }, preventDefault() {},
+});
+
+moved = null;
+list = makeList(4);
+makeSortable(list, (from, to) => { moved = [from, to]; });
+key(list, list.children[0], 'ArrowDown');
+check("arrow down reports a move one row down", moved && moved[0] === 0 && moved[1] === 1, moved);
+check("arrow down reorders the dom", list.children.map(c => c.id).join() === "1,0,2,3", list.children.map(c => c.id));
+
+moved = null;
+list = makeList(4);
+makeSortable(list, (from, to) => { moved = [from, to]; });
+key(list, list.children[2], 'ArrowUp');
+check("arrow up reports a move one row up", moved && moved[0] === 2 && moved[1] === 1, moved);
+check("arrow up reorders the dom", list.children.map(c => c.id).join() === "0,2,1,3", list.children.map(c => c.id));
+
+moved = null;
+list = makeList(3);
+makeSortable(list, (from, to) => { moved = [from, to]; });
+key(list, list.children[0], 'ArrowUp');
+check("arrow up on the first row is a no-op", moved === null && list.children.map(c => c.id).join() === "0,1,2", moved);
+key(list, list.children[2], 'ArrowDown');
+check("arrow down on the last row is a no-op", moved === null && list.children.map(c => c.id).join() === "0,1,2", moved);
+
+moved = null;
+list = makeList(3);
+makeSortable(list, (from, to) => { moved = [from, to]; });
+key(list, list.children[0], 'Enter');
+list.fire('keydown', { key: 'ArrowDown', target: { closest: () => null }, preventDefault() {} });
+check("an unrelated key and an off-handle key report nothing", moved === null, moved);
+
+// --- degenerate lists ---
+check("null list is inert", makeSortable(null, () => {}).dragging() === false, null);
+const one = makeList(1);
+const s6 = makeSortable(one, () => {});
+down(one, one.children[0]);
+moveTo(one, 100); up(one, 100);
+check("a single row list does not throw", s6.dragging() === false, null);
+
+console.log(fail === 0 ? "PASS" : fail + " failures");
+process.exit(fail === 0 ? 0 : 1);
+`
+
+	dir := t.TempDir()
+	script := filepath.Join(dir, "sortable_test.js")
+	if err := os.WriteFile(script, []byte(harness), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	out, err := exec.Command(node, script).CombinedOutput()
+	if err != nil {
+		t.Fatalf("sortable failed its cases:\n%s", strings.TrimSpace(string(out)))
+	}
+	if !strings.Contains(string(out), "PASS") {
+		t.Fatalf("unexpected harness output:\n%s", out)
+	}
+}

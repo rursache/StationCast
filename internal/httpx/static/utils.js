@@ -257,3 +257,137 @@ function initLyrics(els, getNowPlaying) {
   setInterval(highlight, 500);
   return { sync };
 }
+
+// --- Sortable list ----------------------------------------------------
+// Pointer events rather than HTML5 drag and drop, which does not fire on
+// touch at all. One implementation covers mouse, trackpad and finger.
+//
+// The row being dragged follows the pointer directly, and the rows it passes
+// slide out of its way. Reordering the DOM mid-drag instead would make the
+// row jump between slots rather than track the finger, which reads as the
+// list flickering rather than as picking something up.
+//
+// onMove(from, to, el) fires once on release, with the original and final
+// index. isBusy()/dragging() lets the caller hold off a re-render, since
+// replacing the list mid-drag would pull the row out from under the pointer
+function makeSortable(list, onMove) {
+  if (!list) return { dragging: () => false };
+
+  let el = null;          // the row being dragged
+  let startIndex = -1;
+  let targetIndex = -1;
+  let startY = 0;
+  let step = 0;           // row pitch, height plus the gap between rows
+  let pointerId = null;
+  let others = [];
+
+  const rows = () => [...list.children];
+
+  function begin(handle, e) {
+    if (el) return;
+    const row = handle.closest('[data-sortable-item]');
+    if (!row) return;
+    const all = rows();
+    startIndex = all.indexOf(row);
+    if (startIndex < 0) return;
+
+    el = row;
+    targetIndex = startIndex;
+    startY = e.clientY;
+    pointerId = e.pointerId;
+
+    // Pitch measured from the live layout rather than assumed, so the gap
+    // between rows does not have to be hard coded here
+    const a = all[0].getBoundingClientRect();
+    step = all.length > 1 ? all[1].getBoundingClientRect().top - a.top : a.height;
+
+    others = all.filter(r => r !== el);
+    others.forEach(r => r.classList.add('sort-shifting'));
+    el.classList.add('sorting');
+
+    try { handle.setPointerCapture(pointerId); } catch {}
+    e.preventDefault();
+  }
+
+  function move(e) {
+    if (!el || e.pointerId !== pointerId) return;
+    e.preventDefault();
+
+    const dy = e.clientY - startY;
+    el.style.transform = 'translateY(' + dy + 'px)';
+
+    // Which slot the row would land in if released now
+    const n = rows().length;
+    let idx = startIndex + (step ? Math.round(dy / step) : 0);
+    idx = Math.max(0, Math.min(n - 1, idx));
+    if (idx === targetIndex) return;
+    targetIndex = idx;
+
+    // Rows between the origin and the target slide one place to make the gap
+    others.forEach(r => {
+      const i = rows().indexOf(r);
+      let shift = 0;
+      if (startIndex < targetIndex && i > startIndex && i <= targetIndex) shift = -step;
+      else if (startIndex > targetIndex && i >= targetIndex && i < startIndex) shift = step;
+      r.style.transform = shift ? 'translateY(' + shift + 'px)' : '';
+    });
+  }
+
+  // apply is false when the browser took the gesture away rather than the
+  // user finishing it, in which case the row goes back where it started
+  function finish(e, apply) {
+    if (!el || (e && e.pointerId !== pointerId)) return;
+    const row = el;
+    const from = startIndex;
+    const to = targetIndex;
+
+    row.classList.remove('sorting');
+    row.style.transform = '';
+    others.forEach(r => { r.classList.remove('sort-shifting'); r.style.transform = ''; });
+
+    el = null;
+    others = [];
+    startIndex = -1;
+    targetIndex = -1;
+    pointerId = null;
+
+    if (!apply || to < 0 || to === from) return;
+    // The DOM moves once, on release, so the row lands where it was dropped
+    const all = rows();
+    if (to > from) list.insertBefore(row, all[to].nextSibling);
+    else list.insertBefore(row, all[to]);
+    onMove(from, to, row);
+  }
+
+  list.addEventListener('pointerdown', e => {
+    const handle = e.target.closest('[data-sort-handle]');
+    if (handle && list.contains(handle)) begin(handle, e);
+  });
+  list.addEventListener('pointermove', move);
+  list.addEventListener('pointerup', e => finish(e, true));
+  list.addEventListener('pointercancel', e => finish(e, false));
+  // The only event guaranteed to fire whenever capture ends. Without it a
+  // capture that goes away without a pointerup wedges the drag on forever,
+  // and a wedged drag holds off every later refresh of the pane
+  list.addEventListener('lostpointercapture', e => finish(e, false));
+
+  // Keyboard equivalent, so reordering does not require a pointer at all
+  list.addEventListener('keydown', e => {
+    const handle = e.target.closest('[data-sort-handle]');
+    if (!handle) return;
+    const dir = e.key === 'ArrowUp' ? -1 : e.key === 'ArrowDown' ? 1 : 0;
+    if (!dir) return;
+    e.preventDefault();
+    const row = handle.closest('[data-sortable-item]');
+    const all = rows();
+    const from = all.indexOf(row);
+    const to = from + dir;
+    if (to < 0 || to >= all.length) return;
+    if (dir < 0) list.insertBefore(row, all[to]);
+    else list.insertBefore(row, all[to].nextSibling);
+    handle.focus();
+    onMove(from, to, row);
+  });
+
+  return { dragging: () => el !== null };
+}

@@ -2,9 +2,11 @@ package playlist
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sync"
 	"testing"
 
@@ -474,5 +476,185 @@ func TestLoopModeRepeatsCurrentTrack(t *testing.T) {
 			t.Fatalf("loop repeat %d = %v, want track %d", i, got, first.ID)
 		}
 		s.MarkPlaying(got)
+	}
+}
+
+// queueIDs returns the in-memory queue for assertions
+func queueIDs(s *Scheduler) []int64 { return memoryQueue(s) }
+
+func setupQueue(t *testing.T, n int) (*Scheduler, []int64) {
+	t.Helper()
+	s := newTestSchedulerWith(t, n)
+	var ids []int64
+	for _, tr := range s.lib.Snapshot() {
+		if err := s.Enqueue(tr.ID); err != nil {
+			t.Fatal(err)
+		}
+		ids = append(ids, tr.ID)
+	}
+	return s, ids
+}
+
+func TestMoveQueueItemReorders(t *testing.T) {
+	cases := []struct {
+		name     string
+		from, to int
+		want     []int // indices into the original order
+	}{
+		{"first to last", 0, 3, []int{1, 2, 3, 0}},
+		{"last to first", 3, 0, []int{3, 0, 1, 2}},
+		{"down one", 0, 1, []int{1, 0, 2, 3}},
+		{"up one", 2, 1, []int{0, 2, 1, 3}},
+		{"middle to middle", 1, 2, []int{0, 2, 1, 3}},
+		{"no move", 2, 2, []int{0, 1, 2, 3}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			s, ids := setupQueue(t, 4)
+			if err := s.MoveQueueItem(c.from, c.to, ids[c.from]); err != nil {
+				t.Fatalf("MoveQueueItem: %v", err)
+			}
+			got := queueIDs(s)
+			if len(got) != len(c.want) {
+				t.Fatalf("queue length = %d, want %d", len(got), len(c.want))
+			}
+			for i, w := range c.want {
+				if got[i] != ids[w] {
+					t.Errorf("position %d = %d, want %d (original index %d)", i, got[i], ids[w], w)
+				}
+			}
+			// the move has to survive a restart, so the table must agree
+			assertQueuesAgree(t, s)
+		})
+	}
+}
+
+func TestMoveQueueItemRejectsOutOfRange(t *testing.T) {
+	s, ids := setupQueue(t, 3)
+	for _, c := range []struct{ from, to int }{
+		{-1, 0}, {0, -1}, {3, 0}, {0, 3}, {99, 0}, {0, 99},
+	} {
+		id := int64(0)
+		if c.from >= 0 && c.from < len(ids) {
+			id = ids[c.from]
+		}
+		if err := s.MoveQueueItem(c.from, c.to, id); !errors.Is(err, ErrQueueIndexOutOfRange) {
+			t.Errorf("MoveQueueItem(%d, %d) error = %v, want ErrQueueIndexOutOfRange", c.from, c.to, err)
+		}
+	}
+	// nothing may have shifted
+	got := queueIDs(s)
+	for i := range ids {
+		if got[i] != ids[i] {
+			t.Fatalf("a rejected move still reordered the queue: %v", got)
+		}
+	}
+}
+
+// The queue advances on its own as tracks play. A drag that began before the
+// head was consumed must not be applied to the shifted queue
+func TestMoveQueueItemRejectsStaleRequest(t *testing.T) {
+	s, ids := setupQueue(t, 4)
+
+	// the head is consumed while the user is dragging
+	if picked := s.Pick(); picked == nil {
+		t.Fatal("Pick returned nil")
+	}
+
+	// the client still believes index 0 holds the original first track
+	err := s.MoveQueueItem(0, 2, ids[0])
+	if !errors.Is(err, ErrQueueChanged) {
+		t.Fatalf("error = %v, want ErrQueueChanged", err)
+	}
+	// and the queue is untouched
+	got := queueIDs(s)
+	for i, want := range ids[1:] {
+		if got[i] != want {
+			t.Errorf("position %d = %d, want %d: a stale move was applied", i, got[i], want)
+		}
+	}
+}
+
+// The same track may be queued more than once, so a move has to be located by
+// position rather than by identity
+func TestMoveQueueItemWithDuplicateTracks(t *testing.T) {
+	s := newTestSchedulerWith(t, 2)
+	tracks := s.lib.Snapshot()
+	a, b := tracks[0].ID, tracks[1].ID
+	for _, id := range []int64{a, b, a} {
+		if err := s.Enqueue(id); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// move the SECOND copy of a, at index 2, to the front
+	if err := s.MoveQueueItem(2, 0, a); err != nil {
+		t.Fatalf("MoveQueueItem: %v", err)
+	}
+	got := queueIDs(s)
+	want := []int64{a, a, b}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("queue = %v, want %v", got, want)
+		}
+	}
+	assertQueuesAgree(t, s)
+}
+
+func TestMoveQueueItemOnEmptyQueue(t *testing.T) {
+	s := newTestSchedulerWith(t, 2)
+	if err := s.MoveQueueItem(0, 0, 1); !errors.Is(err, ErrQueueIndexOutOfRange) {
+		t.Errorf("error = %v, want ErrQueueIndexOutOfRange", err)
+	}
+}
+
+// Reordering runs against the same state Pick drains, so the two must not be
+// able to corrupt the queue between them
+func TestMoveQueueItemConcurrentWithPick(t *testing.T) {
+	const n = 20
+	s, _ := setupQueue(t, n)
+
+	var wg sync.WaitGroup
+	for i := 0; i < 30; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			ids := queueIDs(s)
+			if len(ids) < 2 {
+				return
+			}
+			_ = s.MoveQueueItem(0, len(ids)-1, ids[0])
+		}()
+	}
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if picked := s.Pick(); picked != nil {
+				s.MarkPlaying(picked)
+			}
+		}()
+	}
+	wg.Wait()
+
+	// whatever the interleaving, memory and the table must still agree
+	assertQueuesAgree(t, s)
+}
+
+// A move rewrites the queue table, and the in-memory slice must not drift
+// away from what is on disk when that write fails. Dropping the table is the
+// cheapest way to make the write fail without tearing down the connection
+func TestMoveQueueItemRollsBackWhenPersistFails(t *testing.T) {
+	s, ids := setupQueue(t, 4)
+	before := append([]int64(nil), queueIDs(s)...)
+
+	if _, err := s.db.Exec("DROP TABLE queue"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.MoveQueueItem(0, 3, ids[0]); err == nil {
+		t.Fatal("expected a move to fail once the queue table is gone")
+	}
+	if got := queueIDs(s); !reflect.DeepEqual(got, before) {
+		t.Fatalf("queue was left reordered after a failed persist: got %v want %v", got, before)
 	}
 }

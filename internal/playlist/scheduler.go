@@ -179,6 +179,54 @@ func (s *Scheduler) Dequeue(idx int) error {
 	return nil
 }
 
+// Errors a reorder can fail with, distinguished so the caller can tell a bad
+// request from one that simply arrived too late
+var (
+	ErrQueueIndexOutOfRange = errors.New("queue index out of range")
+	ErrQueueChanged         = errors.New("queue changed")
+)
+
+// MoveQueueItem moves the entry at `from` to `to`.
+//
+// expectID is the track the caller believes sits at `from`. The queue advances
+// on its own as tracks play, so by the time a drag finishes the entry may have
+// become the current track and everything shifted up. Without the check the
+// move would silently reorder the wrong entries. A track may legitimately be
+// queued twice, so identity alone cannot locate the entry, which is why this
+// takes a position and verifies it rather than taking an order of ids
+func (s *Scheduler) MoveQueueItem(from, to int, expectID int64) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if from < 0 || from >= len(s.manual) || to < 0 || to >= len(s.manual) {
+		return ErrQueueIndexOutOfRange
+	}
+	if s.manual[from] != expectID {
+		return ErrQueueChanged
+	}
+	if from == to {
+		return nil
+	}
+
+	before := append([]int64(nil), s.manual...)
+	moved := s.manual[from]
+	rest := make([]int64, 0, len(s.manual)-1)
+	rest = append(rest, s.manual[:from]...)
+	rest = append(rest, s.manual[from+1:]...)
+
+	next := make([]int64, 0, len(s.manual))
+	next = append(next, rest[:to]...)
+	next = append(next, moved)
+	next = append(next, rest[to:]...)
+	s.manual = next
+
+	if err := s.persistQueueLocked(); err != nil {
+		s.manual = before
+		return err
+	}
+	return nil
+}
+
 // persistQueueLocked rewrites the queue table to match s.manual. It must be
 // called with s.mu held: the read of s.manual and the write have to be one
 // atomic step, otherwise a concurrent caller can take its snapshot in between

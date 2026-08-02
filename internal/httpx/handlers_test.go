@@ -6,8 +6,10 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strconv"
 	"strings"
 	"testing"
@@ -1302,5 +1304,215 @@ func TestStaticAssetsAreVersionStamped(t *testing.T) {
 				t.Errorf("%s has an unstamped stylesheet link", path)
 			}
 		})
+	}
+}
+
+// queueTrackIDs returns the current queue order for assertions
+func queueTrackIDs(env *testEnv) []int64 {
+	out := []int64{}
+	for _, t := range env.sched.Queue() {
+		out = append(out, t.ID)
+	}
+	return out
+}
+
+func TestQueueMoveReorders(t *testing.T) {
+	env := newTestEnv(t, "a.mp3", "b.mp3", "c.mp3")
+	var ids []int64
+	for _, name := range []string{"a.mp3", "b.mp3", "c.mp3"} {
+		id := env.trackID(t, name)
+		if err := env.sched.Enqueue(id); err != nil {
+			t.Fatal(err)
+		}
+		ids = append(ids, id)
+	}
+
+	rec := env.authed(t, http.MethodPost, "/admin/queue/move", map[string][]string{
+		"from": {"0"}, "to": {"2"}, "id": {strconv.FormatInt(ids[0], 10)},
+	})
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("status = %d, body %q", rec.Code, rec.Body.String())
+	}
+
+	got := queueTrackIDs(env)
+	want := []int64{ids[1], ids[2], ids[0]}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("queue = %v, want %v", got, want)
+		}
+	}
+}
+
+// The queue advances on its own, so a drag that began before the head was
+// consumed must be refused rather than applied to the shifted queue
+func TestQueueMoveRefusesStaleRequest(t *testing.T) {
+	env := newTestEnv(t, "a.mp3", "b.mp3", "c.mp3")
+	var ids []int64
+	for _, name := range []string{"a.mp3", "b.mp3", "c.mp3"} {
+		id := env.trackID(t, name)
+		if err := env.sched.Enqueue(id); err != nil {
+			t.Fatal(err)
+		}
+		ids = append(ids, id)
+	}
+	// a track starts playing mid-drag
+	env.sched.Pick()
+
+	rec := env.authed(t, http.MethodPost, "/admin/queue/move", map[string][]string{
+		"from": {"0"}, "to": {"1"}, "id": {strconv.FormatInt(ids[0], 10)},
+	})
+	if rec.Code != http.StatusConflict {
+		t.Errorf("status = %d, want 409 so the client refreshes", rec.Code)
+	}
+
+	// and the queue is untouched
+	got := queueTrackIDs(env)
+	want := []int64{ids[1], ids[2]}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("a refused move still reordered the queue: %v", got)
+		}
+	}
+}
+
+func TestQueueMoveRejectsBadInput(t *testing.T) {
+	env := newTestEnv(t, "a.mp3", "b.mp3")
+	var ids []int64
+	for _, name := range []string{"a.mp3", "b.mp3"} {
+		id := env.trackID(t, name)
+		if err := env.sched.Enqueue(id); err != nil {
+			t.Fatal(err)
+		}
+		ids = append(ids, id)
+	}
+	first := strconv.FormatInt(ids[0], 10)
+
+	cases := []struct {
+		name         string
+		from, to, id string
+		want         int
+	}{
+		{"from not a number", "x", "1", first, http.StatusBadRequest},
+		{"to not a number", "0", "x", first, http.StatusBadRequest},
+		{"id not a number", "0", "1", "x", http.StatusBadRequest},
+		{"from out of range", "9", "0", first, http.StatusBadRequest},
+		{"to out of range", "0", "9", first, http.StatusBadRequest},
+		{"negative from", "-1", "0", first, http.StatusBadRequest},
+		{"negative to", "0", "-1", first, http.StatusBadRequest},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			rec := env.authed(t, http.MethodPost, "/admin/queue/move", map[string][]string{
+				"from": {c.from}, "to": {c.to}, "id": {c.id},
+			})
+			if rec.Code != c.want {
+				t.Errorf("status = %d, want %d", rec.Code, c.want)
+			}
+		})
+	}
+
+	// nothing may have shifted
+	got := queueTrackIDs(env)
+	for i := range ids {
+		if got[i] != ids[i] {
+			t.Fatalf("a rejected request reordered the queue: %v", got)
+		}
+	}
+}
+
+// Moving an item onto its own position is a no-op the UI can send freely
+func TestQueueMoveToSamePositionSucceeds(t *testing.T) {
+	env := newTestEnv(t, "a.mp3", "b.mp3")
+	id := env.trackID(t, "a.mp3")
+	if err := env.sched.Enqueue(id); err != nil {
+		t.Fatal(err)
+	}
+	if err := env.sched.Enqueue(env.trackID(t, "b.mp3")); err != nil {
+		t.Fatal(err)
+	}
+
+	before := queueTrackIDs(env)
+	rec := env.authed(t, http.MethodPost, "/admin/queue/move", map[string][]string{
+		"from": {"0"}, "to": {"0"}, "id": {strconv.FormatInt(id, 10)},
+	})
+	if rec.Code != http.StatusSeeOther {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusSeeOther)
+	}
+	if got := queueTrackIDs(env); !reflect.DeepEqual(got, before) {
+		t.Errorf("a move onto the same slot changed the queue: got %v want %v", got, before)
+	}
+}
+
+// The other handler tests hand the request a pre-built Form, which makes
+// ParseForm a no-op, so the decoding the browser actually exercises is only
+// covered here
+func TestQueueMoveDecodesARealFormBody(t *testing.T) {
+	env := newTestEnv(t, "a.mp3", "b.mp3", "c.mp3")
+	var ids []int64
+	for _, name := range []string{"a.mp3", "b.mp3", "c.mp3"} {
+		id := env.trackID(t, name)
+		if err := env.sched.Enqueue(id); err != nil {
+			t.Fatal(err)
+		}
+		ids = append(ids, id)
+	}
+
+	body := url.Values{
+		"from": {"2"}, "to": {"0"}, "id": {strconv.FormatInt(ids[2], 10)},
+	}.Encode()
+	req := httptest.NewRequest(http.MethodPost, "/admin/queue/move", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.AddCookie(env.login(t))
+	if rec := env.do(t, req); rec.Code != http.StatusSeeOther {
+		t.Fatalf("status = %d, body %q", rec.Code, rec.Body.String())
+	}
+
+	got, want := queueTrackIDs(env), []int64{ids[2], ids[0], ids[1]}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("queue = %v, want %v", got, want)
+	}
+}
+
+func TestQueueMoveRejectsAnUnparseableBody(t *testing.T) {
+	env := newTestEnv(t, "a.mp3", "b.mp3")
+	id := env.trackID(t, "a.mp3")
+	if err := env.sched.Enqueue(id); err != nil {
+		t.Fatal(err)
+	}
+	if err := env.sched.Enqueue(env.trackID(t, "b.mp3")); err != nil {
+		t.Fatal(err)
+	}
+	before := queueTrackIDs(env)
+
+	// %zz is not valid percent encoding, so ParseForm fails. The junk sits in
+	// a field the handler never reads, and the three it does read are all
+	// valid, so this only stays a 400 if the parse error is honoured rather
+	// than the surviving pairs being used
+	body := "from=0&to=1&junk=%zz&id=" + strconv.FormatInt(id, 10)
+	req := httptest.NewRequest(http.MethodPost, "/admin/queue/move", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.AddCookie(env.login(t))
+	rec := env.do(t, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusBadRequest)
+	}
+	if got := queueTrackIDs(env); !reflect.DeepEqual(got, before) {
+		t.Fatalf("a rejected request changed the queue: got %v want %v", got, before)
+	}
+}
+
+// The drag handle has to exist in the markup the server renders on first
+// paint, not only in the rows the script builds later
+func TestQueueRowsCarryDragHandles(t *testing.T) {
+	env := newTestEnv(t, "a.mp3")
+	if err := env.sched.Enqueue(env.trackID(t, "a.mp3")); err != nil {
+		t.Fatal(err)
+	}
+
+	body := env.authed(t, http.MethodGet, "/admin/", nil).Body.String()
+	for _, want := range []string{"data-sortable-item", "data-sort-handle", "data-track-id"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("server-rendered queue row is missing %q, so it cannot be dragged before the first refresh", want)
+		}
 	}
 }
