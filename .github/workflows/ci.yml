@@ -1,6 +1,8 @@
 name: CI
 
 on:
+  push:
+    branches: [master]
   pull_request:
     branches: [master]
   workflow_dispatch:
@@ -40,7 +42,10 @@ jobs:
           sleep 3
           curl -fsS http://127.0.0.1:18000/now-playing > /tmp/np.json
           cat /tmp/np.json
-          curl -fsS -m 4 http://127.0.0.1:18000/stream -o /tmp/stream.mp3
+          # /stream never ends, so hitting -m is the success case. 28 is the
+          # only tolerated code, a refused connection or an HTTP error still
+          # fails the step
+          curl -fsS -m 4 http://127.0.0.1:18000/stream -o /tmp/stream.mp3 || test $? -eq 28
           test $(wc -c < /tmp/stream.mp3) -gt 50000 || (echo "stream too small"; exit 1)
           ffprobe -hide_banner -loglevel error -i /tmp/stream.mp3 -f null - 2>&1 | tee /tmp/probe.log
           test ! -s /tmp/probe.log || (echo "decode errors"; exit 1)
