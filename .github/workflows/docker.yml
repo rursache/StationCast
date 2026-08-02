@@ -10,6 +10,13 @@ permissions:
   contents: read
   packages: write
 
+# Two master pushes in quick succession would otherwise race, and whichever
+# multi-arch build happened to finish last would decide what latest points at,
+# regardless of which commit was newer
+concurrency:
+  group: docker-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
@@ -36,13 +43,19 @@ jobs:
       # A tag build is named after the tag. A master build carries the short
       # commit, so the admin footer and the startup log identify exactly which
       # test build is deployed rather than just saying "master"
+      # Ref values go through env rather than being interpolated into the
+      # script. The tag filter is a glob, so a ref name is attacker-influenced
+      # text and git happily accepts shell metacharacters in one
       - name: Resolve version
         id: ver
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
         run: |
-          if [ "${{ github.ref_type }}" = "tag" ]; then
-            echo "value=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+          if [ "$REF_TYPE" = "tag" ]; then
+            echo "value=$REF_NAME" >> "$GITHUB_OUTPUT"
           else
-            echo "value=${{ github.ref_name }}-$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+            echo "value=$REF_NAME-$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Image metadata

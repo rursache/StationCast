@@ -34,6 +34,8 @@ type pcmSource struct {
 	markDur     time.Duration
 	firstAt     time.Time
 	awaitFirst  bool
+	// set when the current Read already reported a track change in detail
+	changeLogged bool
 }
 
 // pcmStallWarn is how long a single read may take before it is worth
@@ -46,12 +48,20 @@ const pcmStallWarn = 250 * time.Millisecond
 // the whole station at the same instant, whatever their connection is like
 func (s *pcmSource) Read(p []byte) (int, error) {
 	start := time.Now()
+	// Captured before the call, not after. A read can span a track boundary,
+	// and by the time it returns curTrk names the track that just started
+	// rather than the one whose decoder actually caused the delay
+	track := ""
+	if s.curTrk != nil {
+		track = s.curTrk.Path
+	}
+	s.changeLogged = false
+
 	n, err := s.read(p)
-	if d := time.Since(start); d > pcmStallWarn {
-		track := ""
-		if s.curTrk != nil {
-			track = s.curTrk.Path
-		}
+
+	// A track change reports itself in more detail, so do not also emit the
+	// generic line for the same stall
+	if d := time.Since(start); d > pcmStallWarn && !s.changeLogged {
 		slog.Warn("pcm source stalled, listeners drained this much buffer",
 			"duration", d.Round(time.Millisecond), "track", track)
 	}
@@ -161,6 +171,7 @@ func (s *pcmSource) read(p []byte) (int, error) {
 // covers ffmpeg opening the file, probing it and decoding its first samples.
 // The total is buffer every listener loses at the same moment
 func (s *pcmSource) logTrackChange() {
+	s.changeLogged = true
 	total := time.Since(s.changeStart)
 	firstPCM := time.Since(s.firstAt)
 	track := ""

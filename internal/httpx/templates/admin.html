@@ -166,7 +166,7 @@
           {{range .Tracks}}
           <li class="lib-row group flex items-center gap-3 bg-neutral-950/40 hover:bg-neutral-800/30 rounded-lg px-3 py-2 transition">
             <div class="w-9 h-9 rounded-lg bg-neutral-800 flex-shrink-0 flex items-center justify-center overflow-hidden">
-              {{if .HasArt}}<img src="/art/{{.ID}}" class="w-full h-full object-cover">{{else}}<span class="text-neutral-600">♪</span>{{end}}
+              {{if .HasArt}}<img src="/art/{{.ID}}" loading="lazy" decoding="async" class="w-full h-full object-cover">{{else}}<span class="text-neutral-600">♪</span>{{end}}
             </div>
             <div class="lib-meta min-w-0 flex-1">
               <div class="overflow-x-auto whitespace-nowrap no-scrollbar text-sm">{{if .Title}}{{.Title}}{{else}}<span class="text-neutral-500">untitled</span>{{end}}</div>
