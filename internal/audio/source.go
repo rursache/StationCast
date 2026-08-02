@@ -26,21 +26,58 @@ type pcmSource struct {
 	curTrk   *playlist.Track
 	curStop  chan struct{} // closed to retire the current track's stall watchdog
 	lastRead atomic.Int64  // unix nano of the most recent successful PCM read
+
+	// Track-change timing, reported once the next track's first PCM lands
+	changeStart time.Time
+	pickDur     time.Duration
+	spawnDur    time.Duration
+	markDur     time.Duration
+	firstAt     time.Time
+	awaitFirst  bool
 }
 
+// pcmStallWarn is how long a single read may take before it is worth
+// reporting. The pump asks for 100ms of audio at a time, so anything much
+// beyond that is the encoder sitting idle and every listener draining buffer
+const pcmStallWarn = 250 * time.Millisecond
+
+// Read reports any call that takes long enough to eat into listener buffers.
+// Every listener shares this one goroutine, so a stall here is a stall for
+// the whole station at the same instant, whatever their connection is like
 func (s *pcmSource) Read(p []byte) (int, error) {
+	start := time.Now()
+	n, err := s.read(p)
+	if d := time.Since(start); d > pcmStallWarn {
+		track := ""
+		if s.curTrk != nil {
+			track = s.curTrk.Path
+		}
+		slog.Warn("pcm source stalled, listeners drained this much buffer",
+			"duration", d.Round(time.Millisecond), "track", track)
+	}
+	return n, err
+}
+
+func (s *pcmSource) read(p []byte) (int, error) {
 	for {
 		if s.ctx.Err() != nil {
 			return 0, s.ctx.Err()
 		}
 		if s.curOut == nil {
+			// Everything from here until the next track's first PCM byte is
+			// dead air on the encoder input, so each phase is timed separately
+			s.changeStart = time.Now()
+			pickAt := s.changeStart
 			t := s.eng.sched.Pick()
+			s.pickDur = time.Since(pickAt)
 			if t == nil {
 				s.eng.sched.MarkPlaying(nil)
 				s.eng.hub.SetMetadata(s.eng.cfg.StationName)
 				return fillSilence(p), nil
 			}
+			spawnAt := time.Now()
 			cmd, out, errPipe, err := s.startDecoder(t)
+			s.spawnDur = time.Since(spawnAt)
 			if err != nil {
 				slog.Warn("decoder start failed", "track", t.Path, "err", err)
 				continue
@@ -60,7 +97,11 @@ func (s *pcmSource) Read(p []byte) (int, error) {
 			s.eng.mu.Lock()
 			s.eng.curCmd = cmd
 			s.eng.mu.Unlock()
+			markAt := time.Now()
 			s.eng.sched.MarkPlaying(t)
+			s.markDur = time.Since(markAt)
+			s.firstAt = time.Now()
+			s.awaitFirst = true
 			line := t.DisplayLine(s.eng.cfg.StationName)
 			s.eng.hub.SetMetadata(line)
 			slog.Info("now playing", "id", t.ID, "title", line)
@@ -75,6 +116,10 @@ func (s *pcmSource) Read(p []byte) (int, error) {
 		n, err := s.curOut.Read(p)
 		if n > 0 {
 			s.lastRead.Store(time.Now().UnixNano())
+			if s.awaitFirst {
+				s.awaitFirst = false
+				s.logTrackChange()
+			}
 			return n, nil
 		}
 		if err != nil {
@@ -107,6 +152,34 @@ func (s *pcmSource) Read(p []byte) (int, error) {
 			continue
 		}
 	}
+}
+
+// logTrackChange reports how long the encoder went without PCM while
+// switching tracks, broken down by phase so the cost is attributable:
+// pick covers the scheduler and its queue writes, spawn covers forking
+// ffmpeg, mark_playing covers the history and settings writes, and first_pcm
+// covers ffmpeg opening the file, probing it and decoding its first samples.
+// The total is buffer every listener loses at the same moment
+func (s *pcmSource) logTrackChange() {
+	total := time.Since(s.changeStart)
+	firstPCM := time.Since(s.firstAt)
+	track := ""
+	if s.curTrk != nil {
+		track = s.curTrk.Path
+	}
+	attrs := []any{
+		"total", total.Round(time.Millisecond),
+		"pick", s.pickDur.Round(time.Millisecond),
+		"spawn", s.spawnDur.Round(time.Millisecond),
+		"mark_playing", s.markDur.Round(time.Millisecond),
+		"first_pcm", firstPCM.Round(time.Millisecond),
+		"track", track,
+	}
+	if total > pcmStallWarn {
+		slog.Warn("track change left the encoder without audio", attrs...)
+		return
+	}
+	slog.Info("track change gap", attrs...)
 }
 
 func (s *pcmSource) startDecoder(t *playlist.Track) (*exec.Cmd, io.ReadCloser, *stderrPipe, error) {
