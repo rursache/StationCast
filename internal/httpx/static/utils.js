@@ -145,7 +145,9 @@ function activeLyricIndex(lines, pos) {
 // There is no browser API that reports it, so the default is an estimate and
 // the listener can correct it. Kept per browser, like the volume setting
 const LYRICS_OFFSET_KEY = 'stationcast.lyricsOffset';
-const LYRICS_OFFSET_DEFAULT = 5;
+// Measured against real playback rather than derived from the buffer sizes,
+// which over-predict the lag badly
+const LYRICS_OFFSET_DEFAULT = -0.5;
 const LYRICS_OFFSET_MIN = -5;
 const LYRICS_OFFSET_MAX = 30;
 

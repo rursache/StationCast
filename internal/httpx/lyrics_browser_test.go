@@ -157,6 +157,12 @@ globalThis.localStorage = {
   setItem: (k, v) => { store[k] = String(v); },
 };
 check("default when unset", getLyricsOffset() === LYRICS_OFFSET_DEFAULT, getLyricsOffset());
+// pinned, since every other check here compares against the constant and
+// would pass just as happily if the shipped default drifted
+check("default is the measured -0.5s", LYRICS_OFFSET_DEFAULT === -0.5, LYRICS_OFFSET_DEFAULT);
+check("default sits on the nudge grid", (LYRICS_OFFSET_DEFAULT * 2) % 1 === 0, LYRICS_OFFSET_DEFAULT);
+check("default is within the allowed range",
+  LYRICS_OFFSET_DEFAULT >= LYRICS_OFFSET_MIN && LYRICS_OFFSET_DEFAULT <= LYRICS_OFFSET_MAX, LYRICS_OFFSET_DEFAULT);
 setLyricsOffset(8);
 check("round trips", getLyricsOffset() === 8, getLyricsOffset());
 check("clamps above max", setLyricsOffset(LYRICS_OFFSET_MAX + 50) === LYRICS_OFFSET_MAX, null);
