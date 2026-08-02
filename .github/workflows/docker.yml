@@ -3,6 +3,7 @@ name: Build and publish container
 on:
   push:
     tags: ["v*"]
+    branches: [master]
   workflow_dispatch:
 
 permissions:
@@ -32,11 +33,27 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # A tag build is named after the tag. A master build carries the short
+      # commit, so the admin footer and the startup log identify exactly which
+      # test build is deployed rather than just saying "master"
+      - name: Resolve version
+        id: ver
+        run: |
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            echo "value=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=${{ github.ref_name }}-$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Image metadata
         id: meta
         uses: docker/metadata-action@v6
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          # A tag push publishes the versioned tags and moves latest to it.
+          # A push to master publishes latest only, so a test build can be
+          # rolled out by pulling latest without cutting a release. That does
+          # mean latest tracks the tip of master rather than the last release
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
@@ -53,6 +70,6 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
-            VERSION=${{ github.ref_name }}
+            VERSION=${{ steps.ver.outputs.value }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
